@@ -60,26 +60,26 @@ enum T02Raster {
         }
         guard drawn else { throw RasterError.conversionFailed }
 
-        // Protocol: ESC @, then GS v 0 raster strips of at most 128 rows, feed.
         var output = Data([0x1B, 0x40])
         for start in stride(from: 0, to: height, by: 128) {
             let rows = min(128, height - start)
             output.append(contentsOf: [0x1D, 0x76, 0x30, 0x00,
                                        UInt8(bytesPerRow), 0x00,
                                        UInt8(rows & 255), UInt8(rows >> 8)])
-            // The AIMO T02 used in hardware testing interprets GS v 0 raster data
-            // with both axes reversed compared with our CoreGraphics buffer.
-            // Read rows bottom-to-top and pixels right-to-left so the physical
-            // print is upright and not mirrored.
+            // Hardware test result:
+            // - vertical direction needed reversing (fixed in 1.0.2)
+            // - remaining issue is left-right mirroring.
+            // For the T02, that is corrected by keeping the pixel order inside
+            // the row, but packing bits LSB-first instead of MSB-first.
             for row in start..<(start + rows) {
                 let sourceRow = height - 1 - row
                 let offset = sourceRow * width
                 for n in 0..<bytesPerRow {
                     var packed: UInt8 = 0
                     for bit in 0..<8 {
-                        let sourceX = width - 1 - (n * 8 + bit)
+                        let sourceX = n * 8 + bit
                         if gray[offset + sourceX] < 160 {
-                            packed |= UInt8(0x80 >> bit)
+                            packed |= UInt8(0x01 << bit)
                         }
                     }
                     output.append(packed)
