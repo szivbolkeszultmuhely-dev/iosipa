@@ -1,0 +1,33 @@
+name: Build Moments T02 test IPA (unsigned)
+on:
+  workflow_dispatch:
+jobs:
+  ios-build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+      - name: Compile for iPhone (unsigned)
+        run: |
+          xcodebuild -project MomentsPOST02.xcodeproj \
+            -scheme MomentsPOST02 -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/moments-t02-build" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA (SideStore signs it on device)
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/moments-t02-build/Build/Products/Release-iphoneos/MomentsPOST02.app" "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && /usr/bin/zip -q -r "$GITHUB_WORKSPACE/MomentsPOST02-unsigned.ipa" Payload)
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MomentsPOST02-unsigned
+          path: MomentsPOST02-unsigned.ipa
+          retention-days: 3
