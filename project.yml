@@ -24,11 +24,12 @@ targets:
       path: Resources/Info.plist
       properties:
         CFBundleDevelopmentRegion: hu
-        CFBundleDisplayName: Moments T02 teszt
-        CFBundleShortVersionString: '1.0.4'
-        CFBundleVersion: '5'
+        CFBundleDisplayName: Moments POS
+        CFBundleShortVersionString: '1.1.0'
+        CFBundleVersion: '6'
         LSRequiresIPhoneOS: true
-        NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy próbanyomatot készítsen.'
+        NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy nyugtát tudjon nyomtatni.'
+        NSCameraUsageDescription: 'A Moments POS a termékek vonalkódjának beolvasásához kéri a kamerához való hozzáférést.'
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
