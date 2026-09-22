@@ -10,6 +10,8 @@ struct ReceivedReceiptPDF: Identifiable {
     let receiptID: Int
     let data: Data
     let pageCount: Int
+    /// True only when the user pressed the POS checkout/archive T02 button.
+    let printImmediately: Bool
 }
 
 struct ReceiptPDFPreview: View {
@@ -19,11 +21,14 @@ struct ReceiptPDFPreview: View {
     @State private var isPreparing = false
     @State private var showConfirmation = false
     @State private var printError: String?
+    @State private var autoPrintStarted = false
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Text("Az archivált nyugta eredeti PDF-je. A nyomtatás csak külön megerősítés után indul.")
+                Text(receipt.printImmediately
+                     ? "Kasszából indított nyomtatás: a PDF automatikusan a T02-re kerül, amint a nyomtató csatlakozott."
+                     : "Az archivált nyugta eredeti PDF-je. A nyomtatás csak külön megerősítés után indul.")
                     .font(.footnote).foregroundStyle(.secondary).padding(10)
                 ReceiptPDFView(data: receipt.data)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -78,8 +83,24 @@ struct ReceiptPDFPreview: View {
             } message: {
                 Text("A már archivált #\(receipt.receiptID) nyugta teljes PDF-jét küldjük ki. Nem keletkezik új nyugta.")
             }
-            .onAppear { printer.startIfPossible() }
+            .onAppear {
+                printer.startIfPossible()
+                attemptAutomaticPrint()
+            }
+            .onChange(of: printer.status) { _ in
+                attemptAutomaticPrint()
+            }
         }
+    }
+
+    // A tap on the checkout's native T02 button is the user's print approval.
+    // The page fetches the original PDF once; this view starts sending once and
+    // never retries automatically when the printer or network has a problem.
+    private func attemptAutomaticPrint() {
+        guard receipt.printImmediately, !autoPrintStarted, printer.isReady,
+              !printer.isPrinting else { return }
+        autoPrintStarted = true
+        sendPDFToPrinter()
     }
 
     private func sendPDFToPrinter() {
@@ -139,23 +160,73 @@ enum ReceiptBridge {
       window.__momentsNativePDFBridgeInstalled = true;
       let busy = false;
       const send = message => window.webkit.messageHandlers.momentsPDF.postMessage(message);
+
+      // The WordPress page still contains its legacy beacio/Web Bluetooth
+      // connection bar. That bar reports the WEB connection (always false in
+      // WKWebView), not the app's proven native CoreBluetooth connection.
+      // Hide the entire legacy bar only INSIDE our native iOS application;
+      // outside the app, the WordPress plugin is unchanged.
+      // Native printer selection stays available in the app's T02 tab and in
+      // the native receipt preview when the printer is disconnected.
+      const legacyConnectBar = document.querySelector('.t02-connect-bar');
+      if (legacyConnectBar) {
+        legacyConnectBar.hidden = true;
+        legacyConnectBar.style.setProperty('display', 'none', 'important');
+      }
+
+      // Capture before the WordPress button handlers. Only two explicit user
+      // actions trigger native printing: checkout success and receipt history.
       document.addEventListener('click', async event => {
-        const element = event.target instanceof Element ? event.target.closest('[data-pdf-path]') : null;
-        if (!element) return;
-        const path = element.dataset.pdfPath || '';
-        const match = /^\/receipts\/(\d+)\/pdf$/.exec(path);
-        if (!match) return;
-        const config = window.MPC_POS_CONFIG;
-        if (!config || typeof config.nonce !== 'string' || !config.nonce || typeof config.restUrl !== 'string') return;
-        // Important: do not open the POS's legacy PDF popup inside the app.
+        const clicked = event.target instanceof Element ? event.target : null;
+        if (!clicked) return;
+        let path = '';
+        let intent = 'preview';
+        let requiredID = null;
+        let handled = false;
+
+        const successPrint = clicked.closest('#print-receipt');
+        const historyPrint = clicked.closest('[data-t02-receipt-id]');
+        const pdfLink = clicked.closest('[data-pdf-path]');
+        if (successPrint) {
+          handled = true;
+          intent = 'print';
+          path = document.getElementById('open-receipt-pdf')?.dataset.pdfPath || '';
+        } else if (historyPrint) {
+          handled = true;
+          intent = 'print';
+          requiredID = Number(historyPrint.dataset.t02ReceiptId || 0);
+          // The existing WordPress history card places its PDF link beside the
+          // print button. Do not invent a PDF path from a separately supplied ID.
+          path = historyPrint.parentElement?.querySelector('[data-pdf-path]')?.dataset.pdfPath || '';
+        } else if (pdfLink) {
+          handled = true;
+          path = pdfLink.dataset.pdfPath || '';
+        }
+        if (!handled) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (busy) { send({kind: 'error', message: 'A nyugta betöltése még folyamatban van.'}); return; }
+
+        if (busy) {
+          send({kind: 'error', message: 'A nyugta betöltése még folyamatban van.'});
+          return;
+        }
+        const match = /^\/receipts\/(\d+)\/pdf$/.exec(path);
+        if (!match || (requiredID !== null && requiredID !== Number(match[1]))) {
+          send({kind: 'error', message: 'Ehhez az eladáshoz még nem érhető el a nyugta PDF-je. Ellenőrizd a nyugtanaplót; ne állíts ki új bizonylatot.'});
+          return;
+        }
+        const config = window.MPC_POS_CONFIG;
+        if (!config || typeof config.nonce !== 'string' || !config.nonce || typeof config.restUrl !== 'string') {
+          send({kind: 'error', message: 'A kassza bejelentkezése lejárt. A nyugtanapló ellenőrzése után jelentkezz be újra.'});
+          return;
+        }
         busy = true;
         send({kind: 'started'});
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), 30000);
         try {
+          // Use only the POS's existing authenticated, same-origin PDF endpoint.
+          // No new issueReceipt call: printing must never create a new receipt.
           const endpoint = new URL(config.restUrl + path, location.origin);
           if (endpoint.origin !== location.origin) throw new Error('Érvénytelen PDF-cím.');
           const response = await fetch(endpoint.toString(), {
@@ -164,13 +235,13 @@ enum ReceiptBridge {
             credentials: 'same-origin', cache: 'no-store', signal: controller.signal
           });
           if (!response.ok) {
-            let message = 'A nyugta nem érhető el (' + response.status + ').';
+            let message = 'A nyugta PDF-je nem érhető el (' + response.status + ').';
             try { const detail = await response.json(); message = detail.message || message; } catch (_) { }
             throw new Error(message);
           }
           const contentType = (response.headers.get('content-type') || '').toLowerCase();
           if (!contentType.startsWith('application/pdf')) {
-            throw new Error('Ez a bizonylat még HTML tesztblokk. Az eredeti archivált PDF szükséges a következő lépéshez.');
+            throw new Error('Tesztmódban nincs eredeti Billingo PDF. Éles nyugta csak sikeres kiállítás után nyomtatható; próbanyomathoz használd a T02 próba fület.');
           }
           const blob = await response.blob();
           if (blob.size < 5 || blob.size > 6 * 1024 * 1024) {
@@ -187,7 +258,7 @@ enum ReceiptBridge {
             };
             reader.readAsDataURL(blob);
           });
-          send({kind: 'pdf', receiptID: Number(match[1]), base64: encoded});
+          send({kind: 'pdf', receiptID: Number(match[1]), base64: encoded, intent});
         } catch (error) {
           send({kind: 'error', message: error?.message || 'A PDF átvétele sikertelen.'});
         } finally {

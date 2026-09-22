@@ -101,12 +101,15 @@ extension POSWebModel: WKScriptMessageHandler {
                   let bytes = Data(base64Encoded: encoded),
                   bytes.count <= 6 * 1024 * 1024,
                   bytes.starts(with: Data("%PDF-".utf8)),
-                  let document = PDFDocument(data: bytes), document.pageCount > 0 else {
+                  let document = PDFDocument(data: bytes),
+                  document.pageCount > 0, !document.isLocked else {
                 pdfError = "A kapott fájl nem érvényes PDF. Nem kerül nyomtatásra."
                 return
             }
+            let intent = payload["intent"] as? String ?? "preview"
             receivedPDF = ReceivedReceiptPDF(receiptID: receiptID, data: bytes,
-                                             pageCount: document.pageCount)
+                                             pageCount: document.pageCount,
+                                             printImmediately: intent == "print")
         default:
             break
         }
@@ -228,7 +231,7 @@ struct POSWebScreen: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Moments POS · Kassza").font(.headline)
-                    Text("3/3 előkészítés: eredeti PDF előnézete és T02 nyomtatása.")
+                    Text("Eredeti PDF és közvetlen T02-nyomtatás a kasszából.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
