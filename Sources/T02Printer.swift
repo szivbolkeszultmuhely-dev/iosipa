@@ -128,16 +128,37 @@ final class T02Printer: NSObject, ObservableObject {
             fail("A tesztkép előállítása sikertelen: \(error.localizedDescription)")
             return
         }
+        beginPrint(stream, label: "Tesztnyomat")
+    }
+
+    /// The caller supplies raster bytes produced from the EXACT archived PDF.
+    /// Uses the verified BLE transport; never creates or issues a new receipt.
+    func printReceiptRaster(_ job: Data, receiptID: Int) {
+        guard isReady else { fail("Előbb csatlakozz a T02-höz."); return }
+        guard !isPrinting else { fail("Egy másik nyomtatás még folyamatban van."); return }
+        guard receiptID > 0, job.count > 10, job.count < 1_000_000 else {
+            fail("A nyugta nyomtatási adatai nem megfelelőek. Nem küldjük el.")
+            return
+        }
+        beginPrint(job, label: "Archivált nyugta #\(receiptID)")
+    }
+
+    private func beginPrint(_ job: Data, label: String) {
+        stream = job
         streamOffset = 0
         isPrinting = true
         printGeneration += 1
         let generation = printGeneration
-        note("Tesztnyomat: \(stream.count) bájt, 384 pixel szélesség.")
-        status = "Tesztadatok küldése…"
+        note("\(label): \(stream.count) bájt, 384 pixel szélesség.")
+        status = "\(label) adatainak küldése…"
         sendNextChunk()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+        // The existing 96-byte/45-ms BLE pacing is unchanged. Long receipts
+        // require more time than the short 1.0.4 hardware test.
+        let estimated = Double(job.count) / 96.0 * 0.12 + 45.0
+        let deadline = min(900.0, max(45.0, estimated))
+        DispatchQueue.main.asyncAfter(deadline: .now() + deadline) { [weak self] in
             guard let self = self, self.isPrinting, self.printGeneration == generation else { return }
-            self.abortPrint("Az adatküldés 30 másodpercen belül nem fejeződött be.")
+            self.abortPrint("Az adatküldés a megengedett időn belül nem fejeződött be. Ellenőrizd a nyomtatót; ne nyomtasd újra automatikusan.")
         }
     }
 

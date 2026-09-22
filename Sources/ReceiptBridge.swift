@@ -3,9 +3,8 @@ import SwiftUI
 import PDFKit
 import WebKit
 
-// Integration stage 3A: transfer the EXACT PDF returned by the existing,
-// authenticated Moments POS /receipts/<id>/pdf REST route to iOS for preview.
-// No printer jobs, checkout state changes, or copies of customer data.
+// Integration stage 3B: same authenticated original PDF, now optionally
+// printable after explicit confirmation. No checkout state changes, no new receipts.
 struct ReceivedReceiptPDF: Identifiable {
     let id = UUID()
     let receiptID: Int
@@ -16,21 +15,93 @@ struct ReceivedReceiptPDF: Identifiable {
 struct ReceiptPDFPreview: View {
     let receipt: ReceivedReceiptPDF
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var printer: T02Printer
+    @State private var isPreparing = false
+    @State private var showConfirmation = false
+    @State private var printError: String?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Text("Az eredeti nyugta PDF-je megérkezett az alkalmazásba. Ez még csak előnézet: most NEM küldjük nyomtatásra.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
+                Text("Az archivált nyugta eredeti PDF-je. A nyomtatás csak külön megerősítés után indul.")
+                    .font(.footnote).foregroundStyle(.secondary).padding(10)
                 ReceiptPDFView(data: receipt.data)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 10) {
+                    if !printer.isReady {
+                        HStack {
+                            Text(printer.status).font(.footnote).lineLimit(2)
+                            Spacer(minLength: 8)
+                            Button(printer.isScanning ? "Keresés…" : "T02 keresése") { printer.scan() }
+                                .disabled(printer.isScanning || printer.isPrinting)
+                        }
+                        ForEach(printer.devices) { device in
+                            Button("Csatlakozás: \(device.name)") { printer.connect(to: device.id) }
+                                .buttonStyle(.bordered).disabled(printer.isPrinting)
+                        }
+                    }
+                    if let printError {
+                        Text(printError).font(.footnote).foregroundStyle(.red)
+                    }
+                    Button {
+                        showConfirmation = true
+                    } label: {
+                        HStack {
+                            if isPreparing || printer.isPrinting { ProgressView().tint(.white) }
+                            Image(systemName: "printer.fill")
+                            Text(isPreparing ? "PDF előkészítése…" :
+                                 printer.isPrinting ? "Nyomtatási adatok küldése…" : "Nyugta nyomtatása · T02")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!printer.isReady || isPreparing || printer.isPrinting)
+                    Text(printer.status)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                    if !printer.isPrinting {
+                        Text("Küldés után ellenőrizd, hogy a teljes nyugta olvashatóan kijött-e. Hibánál ne indíts automatikus újranyomtatást.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
             }
-            .navigationTitle("PDF ellenőrzés · #\(receipt.receiptID)")
+            .navigationTitle("Nyugta PDF · #\(receipt.receiptID)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Bezárás") { dismiss() }
+                    Button("Bezárás") { dismiss() }.disabled(isPreparing)
+                }
+            }
+            .alert("Nyugta nyomtatása", isPresented: $showConfirmation) {
+                Button("Küldés a T02-re") { sendPDFToPrinter() }
+                Button("Mégsem", role: .cancel) { }
+            } message: {
+                Text("A már archivált #\(receipt.receiptID) nyugta teljes PDF-jét küldjük ki. Nem keletkezik új nyugta.")
+            }
+            .onAppear { printer.startIfPossible() }
+        }
+    }
+
+    private func sendPDFToPrinter() {
+        guard !isPreparing, !printer.isPrinting, printer.isReady else { return }
+        isPreparing = true
+        printError = nil
+        let pdfBytes = receipt.data
+        let receiptID = receipt.receiptID
+        // Rasterizing a long PDF can take time. Never block the cashier UI.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome = Result { try T02PDFRaster.makeJob(fromPDF: pdfBytes) }
+            DispatchQueue.main.async {
+                isPreparing = false
+                switch outcome {
+                case .success(let job):
+                    guard printer.isReady && !printer.isPrinting else {
+                        printError = "A T02 időközben lecsatlakozott vagy foglalt. Nem küldtünk nyomtatási adatot."
+                        return
+                    }
+                    printer.printReceiptRaster(job, receiptID: receiptID)
+                case .failure(let error):
+                    printError = error.localizedDescription
                 }
             }
         }

@@ -5,8 +5,8 @@ import Combine
 import PDFKit
 
 /// Stage 2A: display the EXISTING authenticated WordPress POS in the native app.
-/// Does not generate receipts, intercept POS buttons or alter the verified
-/// T02 raster protocol. PDF printing is a separate, later integration step.
+/// Preserves the WordPress cashier and intercepts only its authenticated PDF
+/// preview button within this app. The original WordPress plugin is unchanged.
 final class POSWebModel: NSObject, ObservableObject {
     static let posURL = URL(string: "https://szivbolkeszult.hu/moments-pos-kassza/")!
     private static let allowedHosts: Set<String> = ["szivbolkeszult.hu", "www.szivbolkeszult.hu"]
@@ -228,7 +228,7 @@ struct POSWebScreen: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Moments POS · Kassza").font(.headline)
-                    Text("2/3: nyugta PDF átvétele és előnézete. Nyomtatásra még nem küldjük.")
+                    Text("3/3 előkészítés: eredeti PDF előnézete és T02 nyomtatása.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
