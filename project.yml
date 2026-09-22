@@ -25,8 +25,8 @@ targets:
       properties:
         CFBundleDevelopmentRegion: hu
         CFBundleDisplayName: Moments T02 teszt
-        CFBundleShortVersionString: '1.0.1'
-        CFBundleVersion: '2'
+        CFBundleShortVersionString: '1.0.2'
+        CFBundleVersion: '3'
         LSRequiresIPhoneOS: true
         NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy próbanyomatot készítsen.'
         UISupportedInterfaceOrientations:

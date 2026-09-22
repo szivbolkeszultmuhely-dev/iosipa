@@ -67,12 +67,18 @@ enum T02Raster {
             output.append(contentsOf: [0x1D, 0x76, 0x30, 0x00,
                                        UInt8(bytesPerRow), 0x00,
                                        UInt8(rows & 255), UInt8(rows >> 8)])
+            // The AIMO T02 used in hardware testing interprets GS v 0 raster data
+            // with both axes reversed compared with our CoreGraphics buffer.
+            // Read rows bottom-to-top and pixels right-to-left so the physical
+            // print is upright and not mirrored.
             for row in start..<(start + rows) {
-                let offset = row * width
+                let sourceRow = height - 1 - row
+                let offset = sourceRow * width
                 for n in 0..<bytesPerRow {
                     var packed: UInt8 = 0
                     for bit in 0..<8 {
-                        if gray[offset + n * 8 + bit] < 160 {
+                        let sourceX = width - 1 - (n * 8 + bit)
+                        if gray[offset + sourceX] < 160 {
                             packed |= UInt8(0x80 >> bit)
                         }
                     }
