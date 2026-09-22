@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import UIKit
 import Combine
+import PDFKit
 
 /// Stage 2A: display the EXISTING authenticated WordPress POS in the native app.
 /// Does not generate receipts, intercept POS buttons or alter the verified
@@ -12,6 +13,9 @@ final class POSWebModel: NSObject, ObservableObject {
 
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var pdfIsLoading = false
+    @Published private(set) var pdfError: String?
+    @Published var receivedPDF: ReceivedReceiptPDF?
 
     private var hasLoaded = false
 
@@ -21,6 +25,11 @@ final class POSWebModel: NSObject, ObservableObject {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore.default()
         config.allowsInlineMediaPlayback = true
+        config.userContentController.add(self, name: "momentsPDF")
+        config.userContentController.addUserScript(
+            WKUserScript(source: ReceiptBridge.userScript,
+                         injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
 
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self
@@ -50,7 +59,7 @@ final class POSWebModel: NSObject, ObservableObject {
         UIApplication.shared.open(Self.posURL)
     }
 
-    private func isOurWebsite(_ url: URL) -> Bool {
+    func isOurWebsite(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { return false }
         return Self.allowedHosts.contains(host)
     }
@@ -65,6 +74,42 @@ final class POSWebModel: NSObject, ObservableObject {
         var top = root
         while let presented = top.presentedViewController { top = presented }
         top.present(alert, animated: true)
+    }
+}
+
+extension POSWebModel: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        guard message.name == "momentsPDF",
+              message.webView === webView,
+              let url = webView.url, isOurWebsite(url),
+              let payload = message.body as? [String: Any],
+              let kind = payload["kind"] as? String else { return }
+        switch kind {
+        case "started":
+            pdfIsLoading = true
+            pdfError = nil
+        case "error":
+            pdfIsLoading = false
+            let message = payload["message"] as? String ?? "A PDF átvétele sikertelen."
+            pdfError = String(message.prefix(300))
+        case "pdf":
+            pdfIsLoading = false
+            guard let receiptID = payload["receiptID"] as? Int, receiptID > 0,
+                  let encoded = payload["base64"] as? String,
+                  encoded.count <= 8_400_000,
+                  let bytes = Data(base64Encoded: encoded),
+                  bytes.count <= 6 * 1024 * 1024,
+                  bytes.starts(with: Data("%PDF-".utf8)),
+                  let document = PDFDocument(data: bytes), document.pageCount > 0 else {
+                pdfError = "A kapott fájl nem érvényes PDF. Nem kerül nyomtatásra."
+                return
+            }
+            receivedPDF = ReceivedReceiptPDF(receiptID: receiptID, data: bytes,
+                                             pageCount: document.pageCount)
+        default:
+            break
+        }
     }
 }
 
@@ -183,7 +228,7 @@ struct POSWebScreen: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Moments POS · Kassza").font(.headline)
-                    Text("1/3: a webes kassza megjelenítése. A valódi PDF-nyomtatás még nincs bekötve.")
+                    Text("2/3: nyugta PDF átvétele és előnézete. Nyomtatásra még nem küldjük.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -198,6 +243,14 @@ struct POSWebScreen: View {
             .padding(.vertical, 10)
 
             if model.isLoading { ProgressView().frame(maxWidth: .infinity) }
+            if model.pdfIsLoading {
+                HStack { ProgressView(); Text("Az eredeti PDF átvétele…") }
+                    .font(.footnote).padding(8).frame(maxWidth: .infinity)
+            }
+            if let pdfError = model.pdfError {
+                Text(pdfError).font(.footnote).foregroundStyle(.red)
+                    .padding(.horizontal, 14).padding(.vertical, 6)
+            }
 
             if let errorMessage = model.errorMessage {
                 VStack(spacing: 10) {
@@ -216,6 +269,9 @@ struct POSWebScreen: View {
             POSWebContainer(model: model)
         }
         .onAppear { model.loadIfNeeded() }
+        .sheet(item: $model.receivedPDF) { receipt in
+            ReceiptPDFPreview(receipt: receipt)
+        }
     }
 }
 

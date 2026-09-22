@@ -25,8 +25,8 @@ targets:
       properties:
         CFBundleDevelopmentRegion: hu
         CFBundleDisplayName: Moments POS
-        CFBundleShortVersionString: '1.1.0'
-        CFBundleVersion: '6'
+        CFBundleShortVersionString: '1.2.0'
+        CFBundleVersion: '7'
         LSRequiresIPhoneOS: true
         NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy nyugtát tudjon nyomtatni.'
         NSCameraUsageDescription: 'A Moments POS a termékek vonalkódjának beolvasásához kéri a kamerához való hozzáférést.'
