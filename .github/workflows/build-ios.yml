@@ -20,6 +20,13 @@ jobs:
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/moments-t02-build" \
             CODE_SIGNING_ALLOWED=NO build
+      - name: Verify Bluetooth permission in BUILT application
+        run: |
+          APP="$RUNNER_TEMP/moments-t02-build/Build/Products/Release-iphoneos/MomentsPOST02.app"
+          test -f "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$APP/Info.plist" | grep -q 'AIMO T02'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist" | grep -q '1.0.1'
+          echo 'OK: compiled application includes Bluetooth permission and fixed version.'
       - name: Package unsigned IPA (SideStore signs it on device)
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"

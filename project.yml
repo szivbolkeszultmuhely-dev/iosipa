@@ -19,7 +19,20 @@ targets:
     sources:
       - path: Sources
     info:
+      # XcodeGen REGENERATES Info.plist from these properties. It does not
+      # preserve entries manually written to Resources/Info.plist.
       path: Resources/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: hu
+        CFBundleDisplayName: Moments T02 teszt
+        CFBundleShortVersionString: '1.0.1'
+        CFBundleVersion: '2'
+        LSRequiresIPhoneOS: true
+        NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy próbanyomatot készítsen.'
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: hu.szivbolkeszult.momentspost02
