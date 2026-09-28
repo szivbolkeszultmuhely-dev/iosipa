@@ -70,12 +70,12 @@ enum T02BarcodeLabelRaster {
         var raster = Data()
         try appendRaster(image, to: &raster)
 
-        // Reset once, print N exact 15 mm rasters, then a small final feed.
+        // Reset once, print N exact 15 mm rasters, then advance enough paper for easy tearing.
         var output = Data([0x1B, 0x40])
         for _ in 0..<quantity {
             output.append(raster)
         }
-        output.append(contentsOf: [0x1B, 0x64, 0x01])
+        output.append(contentsOf: [0x1B, 0x64, 0x03])
         return output
     }
 
