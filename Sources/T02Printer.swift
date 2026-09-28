@@ -131,6 +131,19 @@ final class T02Printer: NSObject, ObservableObject {
         beginPrint(stream, label: "Tesztnyomat")
     }
 
+    /// Prints one or more product barcode labels generated locally by the app.
+    /// This only reuses the hardware-validated BLE transport; it does not alter
+    /// WooCommerce product data and it never creates a receipt.
+    func printLabelRaster(_ job: Data, quantity: Int) {
+        guard isReady else { fail("Előbb csatlakozz a T02-höz."); return }
+        guard !isPrinting else { fail("Egy másik nyomtatás még folyamatban van."); return }
+        guard (1...100).contains(quantity), job.count > 10, job.count < 1_000_000 else {
+            fail("A címke nyomtatási adatai nem megfelelőek. Nem küldjük el.")
+            return
+        }
+        beginPrint(job, label: "Vonalkódcímke ×\(quantity)")
+    }
+
     /// The caller supplies raster bytes produced from the EXACT archived PDF.
     /// Uses the verified BLE transport; never creates or issues a new receipt.
     func printReceiptRaster(_ job: Data, receiptID: Int) {

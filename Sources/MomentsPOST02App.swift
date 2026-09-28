@@ -15,6 +15,9 @@ struct MomentsPOST02App: App {
 
                 TestView()
                     .tabItem { Label("T02 próba", systemImage: "printer") }
+
+                BarcodeLabelsView(posWeb: posWeb)
+                    .tabItem { Label("Vonalkódok", systemImage: "barcode.viewfinder") }
             }
             .environmentObject(printer)
         }
