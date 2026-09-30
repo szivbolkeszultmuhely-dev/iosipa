@@ -33,6 +33,7 @@ final class MomentsPreferences: ObservableObject {
         static let largeText = "MomentsPOS.LargeText"
         static let autoScanPrinter = "MomentsPOS.AutoScanPrinter"
         static let showLoader = "MomentsPOS.ShowBrandedLoader"
+        static let faceIDLock = "MomentsPOS.FaceIDLock"
     }
 
     @Published var appearance: MomentsAppearanceMode {
@@ -51,6 +52,10 @@ final class MomentsPreferences: ObservableObject {
         didSet { UserDefaults.standard.set(showBrandedLoader, forKey: Key.showLoader) }
     }
 
+    @Published var faceIDLock: Bool {
+        didSet { UserDefaults.standard.set(faceIDLock, forKey: Key.faceIDLock) }
+    }
+
     init() {
         let defaults = UserDefaults.standard
         if let raw = defaults.string(forKey: Key.appearance),
@@ -63,6 +68,7 @@ final class MomentsPreferences: ObservableObject {
         largeText = defaults.object(forKey: Key.largeText) as? Bool ?? false
         autoScanPrinter = defaults.object(forKey: Key.autoScanPrinter) as? Bool ?? true
         showBrandedLoader = defaults.object(forKey: Key.showLoader) as? Bool ?? true
+        faceIDLock = defaults.object(forKey: Key.faceIDLock) as? Bool ?? false
     }
 }
 

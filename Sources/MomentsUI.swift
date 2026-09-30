@@ -246,6 +246,8 @@ struct MomentsSettingsView: View {
                             settingsRow("T02", value: printer.isReady ? "Nyomtatásra kész" : "Nincs kapcsolat")
                         }
                     }
+
+                    ReliabilitySettingsSections(printer: printer, posWeb: posWeb)
                 }
                 .padding(16)
             }

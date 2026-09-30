@@ -9,9 +9,12 @@ struct MomentsPOST02App: App {
     @StateObject private var posWeb = POSWebModel()
     @StateObject private var preferences = MomentsPreferences()
     @StateObject private var appUI = MomentsAppUIState()
+    @StateObject private var lockManager = AppLockManager()
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showLaunchOverlay = true
     @State private var launchStartedAt = Date()
+    @State private var signingWarningText: String?
 
     init() {
         // Product thumbnails and other native URL loads can reuse a reasonably sized
@@ -65,9 +68,15 @@ struct MomentsPOST02App: App {
                             .transition(.opacity)
                             .zIndex(100)
                     }
+
+                    if lockManager.isLocked {
+                        AppLockOverlay(manager: lockManager)
+                            .zIndex(200)
+                    }
                 }
                 .environmentObject(preferences)
                 .environmentObject(appUI)
+                .environmentObject(lockManager)
                 .onAppear {
                     launchStartedAt = Date()
                     // Start the cashier immediately. Bluetooth discovery is deliberately
@@ -81,12 +90,26 @@ struct MomentsPOST02App: App {
                     if !preferences.showBrandedLoader {
                         showLaunchOverlay = false
                     }
+                    OperationLogStore.shared.add("App elindult", detail: "Moments POS 1.8.0")
+                    if preferences.faceIDLock { lockManager.prepare(enabled: true) }
+                    if signingWarningText == nil { signingWarningText = SigningStatus.current().warningText }
                 }
                 .onChange(of: preferences.autoScanPrinter) { enabled in
                     if enabled { printer.startIfPossible() }
                 }
                 .onChange(of: preferences.showBrandedLoader) { enabled in
                     if !enabled { showLaunchOverlay = false }
+                }
+                .onChange(of: preferences.faceIDLock) { enabled in
+                    if enabled { lockManager.prepare(enabled: true) }
+                }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .background {
+                        // Do not leave a settings/PDF sheet above the lock layer.
+                        appUI.settingsPresented = false
+                        posWeb.receivedPDF = nil
+                    }
+                    lockManager.sceneChanged(phase, enabled: preferences.faceIDLock)
                 }
                 .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
                     // No artificial minimum splash duration: as soon as the cashier DOM
@@ -107,6 +130,15 @@ struct MomentsPOST02App: App {
                 .sheet(isPresented: $appUI.settingsPresented) {
                     MomentsSettingsView(printer: printer, posWeb: posWeb)
                         .environmentObject(preferences)
+                        .environmentObject(lockManager)
+                }
+                .alert("SideStore frissítés hamarosan szükséges", isPresented: Binding(
+                    get: { signingWarningText != nil },
+                    set: { if !$0 { signingWarningText = nil } }
+                )) {
+                    Button("Rendben") { signingWarningText = nil }
+                } message: {
+                    Text(signingWarningText ?? "")
                 }
             }
             .environmentObject(preferences)

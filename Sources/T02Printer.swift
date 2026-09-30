@@ -11,12 +11,21 @@ final class T02Printer: NSObject, ObservableObject {
         let rssi: Int
     }
 
+    struct PendingPrintJob: Identifiable, Codable {
+        let id: UUID
+        let label: String
+        let kind: String
+        let createdAt: Date
+        let data: Data
+    }
+
     @Published private(set) var devices: [Device] = []
     @Published private(set) var status = "Bluetooth előkészítése…"
     @Published private(set) var isScanning = false
     @Published private(set) var isPrinting = false
     @Published private(set) var connectedName: String?
     @Published private(set) var logText = ""
+    @Published private(set) var pendingRetry: PendingPrintJob?
 
     var isReady: Bool {
         guard let peripheral = peripheral else { return false }
@@ -35,6 +44,7 @@ final class T02Printer: NSObject, ObservableObject {
     private var connectionGeneration = 0
     private var printGeneration = 0
     private var stream = Data()
+    private var activeJob: PendingPrintJob?
     private var streamOffset = 0
     private var needsWriteResponse = false
     private let savedIDKey = "MomentsPOST02.LastPrinterID"
@@ -44,6 +54,7 @@ final class T02Printer: NSObject, ObservableObject {
         super.init()
         stamp.dateFormat = "HH:mm:ss"
         central = CBCentralManager(delegate: self, queue: .main)
+        loadPendingRetry()
         note("Natív CoreBluetooth próba. Nem szükséges Bluetooth-párosítás az iOS Beállításokban.")
     }
 
@@ -128,7 +139,7 @@ final class T02Printer: NSObject, ObservableObject {
             fail("A tesztkép előállítása sikertelen: \(error.localizedDescription)")
             return
         }
-        beginPrint(stream, label: "Tesztnyomat")
+        beginPrint(stream, label: "Tesztnyomat", kind: "test", retainOnFailure: false)
     }
 
     /// Prints one or more product barcode labels generated locally by the app.
@@ -141,7 +152,7 @@ final class T02Printer: NSObject, ObservableObject {
             fail("A címke nyomtatási adatai nem megfelelőek. Nem küldjük el.")
             return
         }
-        beginPrint(job, label: "Vonalkódcímke ×\(quantity)")
+        beginPrint(job, label: "Vonalkódcímke ×\(quantity)", kind: "label")
     }
 
     /// The caller supplies raster bytes produced from the EXACT archived PDF.
@@ -153,12 +164,13 @@ final class T02Printer: NSObject, ObservableObject {
             fail("A nyugta nyomtatási adatai nem megfelelőek. Nem küldjük el.")
             return
         }
-        beginPrint(job, label: "Archivált nyugta #\(receiptID)")
+        beginPrint(job, label: "Archivált nyugta #\(receiptID)", kind: "receipt")
     }
 
-    private func beginPrint(_ job: Data, label: String) {
+    private func beginPrint(_ job: Data, label: String, kind: String, retainOnFailure: Bool = true, existingJob: PendingPrintJob? = nil) {
         stream = job
         streamOffset = 0
+        activeJob = existingJob ?? PendingPrintJob(id: UUID(), label: label, kind: retainOnFailure ? kind : "test", createdAt: Date(), data: job)
         isPrinting = true
         printGeneration += 1
         let generation = printGeneration
@@ -185,6 +197,14 @@ final class T02Printer: NSObject, ObservableObject {
         guard streamOffset < stream.count else {
             isPrinting = false
             stream.removeAll()
+            let completed = activeJob
+            activeJob = nil
+            if let completed, pendingRetry?.id == completed.id {
+                clearPendingRetry()
+            }
+            if let completed {
+                OperationLogStore.shared.add("Nyomtatási adatküldés kész", detail: completed.label)
+            }
             note("Az összes adat elküldve. Ez nem bizonyítja, hogy a nyomtató ténylegesen kinyomtatta.")
             status = "Adatok elküldve. Ellenőrizd a teljes papírnyomatot!"
             return
@@ -207,9 +227,59 @@ final class T02Printer: NSObject, ObservableObject {
     private func abortPrint(_ message: String) {
         printGeneration += 1
         isPrinting = false
+        if let activeJob, activeJob.kind != "test" {
+            pendingRetry = activeJob
+            savePendingRetry(activeJob)
+            OperationLogStore.shared.add("Nyomtatás megszakadt", detail: "\(activeJob.label) · \(message)", success: false)
+        }
+        activeJob = nil
         stream.removeAll()
         streamOffset = 0
         fail(message)
+    }
+
+    func retryPendingPrint() {
+        guard let job = pendingRetry else { fail("Nincs félbeszakadt nyomtatás."); return }
+        guard isReady else { fail("Előbb csatlakozz a T02-höz."); return }
+        guard !isPrinting else { fail("Egy másik nyomtatás még folyamatban van."); return }
+        OperationLogStore.shared.add("Kézi nyomtatási újrapróbálás", detail: job.label)
+        beginPrint(job.data, label: job.label, kind: job.kind, existingJob: job)
+    }
+
+    func discardPendingRetry() {
+        guard let pendingRetry else { return }
+        OperationLogStore.shared.add("Félbeszakadt nyomtatás elvetve", detail: pendingRetry.label, success: false)
+        clearPendingRetry()
+        status = "A félbeszakadt nyomtatási feladat elvetve."
+    }
+
+    private var pendingRetryURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("moments-pos-pending-print-v1.json")
+    }
+
+    private func savePendingRetry(_ job: PendingPrintJob) {
+        guard let url = pendingRetryURL else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(job)
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            note("A félbeszakadt nyomtatás helyi mentése sikertelen: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadPendingRetry() {
+        guard let url = pendingRetryURL,
+              let data = try? Data(contentsOf: url),
+              let job = try? JSONDecoder().decode(PendingPrintJob.self, from: data),
+              job.data.count > 10, job.data.count < 1_000_000 else { return }
+        pendingRetry = job
+    }
+
+    private func clearPendingRetry() {
+        pendingRetry = nil
+        if let url = pendingRetryURL { try? FileManager.default.removeItem(at: url) }
     }
 
     private func note(_ message: String) {

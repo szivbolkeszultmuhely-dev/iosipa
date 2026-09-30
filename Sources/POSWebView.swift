@@ -17,6 +17,9 @@ final class POSWebModel: NSObject, ObservableObject {
     @Published private(set) var pdfIsLoading = false
     @Published private(set) var pdfError: String?
     @Published var receivedPDF: ReceivedReceiptPDF?
+    @Published private(set) var systemStatus: POSSystemStatus?
+    @Published private(set) var systemStatusError: String?
+    @Published private(set) var recentReceipts: [POSRecentReceipt] = []
 
     private var hasLoaded = false
 
@@ -65,6 +68,69 @@ final class POSWebModel: NSObject, ObservableObject {
         view.scrollView.panGestureRecognizer.delaysTouchesBegan = false
         return view
     }()
+
+    var compatibilityWarning: String? {
+        guard let status = systemStatus else { return nil }
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        if status.apiSchemaVersion != 2 {
+            return "A WordPress plugin API-verziója (\(status.apiSchemaVersion)) nem kompatibilis ezzel az appal."
+        }
+        if !momentsVersionAtLeast(appVersion, status.minimumAppVersion) {
+            return "A WordPress plugin legalább Moments POS \(status.minimumAppVersion) appot igényel."
+        }
+        return nil
+    }
+
+    func refreshReliabilityStatus() {
+        loadIfNeeded()
+        let script = """
+        const config = window.MPC_POS_CONFIG;
+        if (!config || !config.nonce || !config.restUrl) {
+          return JSON.stringify({ok:false, message:'A kassza nincs bejelentkezve.'});
+        }
+        const headers = {'Accept':'application/json','X-WP-Nonce':config.nonce};
+        try {
+          const [statusResponse, receiptsResponse] = await Promise.all([
+            fetch(config.restUrl + '/system-status', {headers, credentials:'same-origin', cache:'no-store'}),
+            fetch(config.restUrl + '/receipts?per_page=20&page=1', {headers, credentials:'same-origin', cache:'no-store'})
+          ]);
+          let status = {}; let receipts = {};
+          try { status = await statusResponse.json(); } catch (_) {}
+          try { receipts = await receiptsResponse.json(); } catch (_) {}
+          if (!statusResponse.ok) return JSON.stringify({ok:false, message:status.message || 'A rendszerállapot nem kérhető le.'});
+          return JSON.stringify({ok:true, status, receipts: receiptsResponse.ok ? (receipts.items || []) : []});
+        } catch (error) {
+          return JSON.stringify({ok:false, message:error?.message || 'Hálózati hiba.'});
+        }
+        """
+        webView.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .failure(let error):
+                    self.systemStatusError = error.localizedDescription
+                case .success(let value):
+                    guard let json = value as? String,
+                          let data = json.data(using: .utf8),
+                          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          (root["ok"] as? Bool) == true,
+                          let statusObject = root["status"] as? [String: Any],
+                          let statusData = try? JSONSerialization.data(withJSONObject: statusObject),
+                          let decodedStatus = try? JSONDecoder().decode(POSSystemStatus.self, from: statusData) else {
+                        self.systemStatusError = "A rendszerállapot válasza nem értelmezhető."
+                        return
+                    }
+                    self.systemStatus = decodedStatus
+                    self.systemStatusError = nil
+                    if let receiptObjects = root["receipts"] as? [[String: Any]],
+                       let receiptData = try? JSONSerialization.data(withJSONObject: receiptObjects),
+                       let decodedReceipts = try? JSONDecoder().decode([POSRecentReceipt].self, from: receiptData) {
+                        self.recentReceipts = Array(decodedReceipts.prefix(20))
+                    }
+                }
+            }
+        }
+    }
 
     func loadIfNeeded() {
         guard !hasLoaded else { return }
@@ -116,6 +182,7 @@ extension POSWebModel: WKScriptMessageHandler {
         if message.name == "momentsReady" {
             if let url = webView.url, isOurWebsite(url) {
                 initialPageReady = true
+                refreshReliabilityStatus()
             }
             return
         }
@@ -165,6 +232,7 @@ extension POSWebModel: WKNavigationDelegate {
         isLoading = false
         errorMessage = nil
         initialPageReady = true
+        refreshReliabilityStatus()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -293,6 +361,16 @@ struct POSWebScreen: View {
                 }
             }
             .frame(height: 4)
+
+            if let warning = model.compatibilityWarning {
+                Text(warning)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.warning)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity)
+                    .background(theme.surfaceAlt)
+            }
 
             if model.pdfIsLoading {
                 HStack(spacing: 8) {

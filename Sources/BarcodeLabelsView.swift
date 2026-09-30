@@ -63,6 +63,45 @@ private enum BarcodeLabelCache {
     }
 }
 
+private enum BarcodeLabelListFilter: String, CaseIterable, Identifiable {
+    case all = "Összes"
+    case favorites = "Kedvencek"
+    case recent = "Legutóbbi"
+    var id: String { rawValue }
+}
+
+private enum BarcodeLabelUsageStore {
+    private static let favoritesKey = "MomentsPOS.BarcodeFavorites.v1"
+    private static let recentKey = "MomentsPOS.BarcodeRecent.v1"
+
+    private static func intArray(forKey key: String) -> [Int] {
+        (UserDefaults.standard.array(forKey: key) ?? []).compactMap { value in
+            if let number = value as? NSNumber { return number.intValue }
+            return value as? Int
+        }
+    }
+
+    static func favorites() -> Set<Int> {
+        Set(intArray(forKey: favoritesKey))
+    }
+
+    static func saveFavorites(_ values: Set<Int>) {
+        UserDefaults.standard.set(Array(values).sorted(), forKey: favoritesKey)
+    }
+
+    static func recent() -> [Int] {
+        intArray(forKey: recentKey)
+    }
+
+    static func recordRecent(_ id: Int) -> [Int] {
+        var values = recent().filter { $0 != id }
+        values.insert(id, at: 0)
+        values = Array(values.prefix(20))
+        UserDefaults.standard.set(values, forKey: recentKey)
+        return values
+    }
+}
+
 enum BarcodeLabelAPIError: LocalizedError {
     case message(String)
 
@@ -182,6 +221,9 @@ struct BarcodeLabelsView: View {
     @State private var firstLoadRequested = false
     @State private var initialRefreshStarted = false
     @State private var restoredCache = false
+    @State private var favoriteIDs: Set<Int> = BarcodeLabelUsageStore.favorites()
+    @State private var recentIDs: [Int] = BarcodeLabelUsageStore.recent()
+    @State private var listFilter: BarcodeLabelListFilter = .all
 
     var body: some View {
         let theme = MomentsPalette.make(mode: preferences.appearance, colorScheme: colorScheme)
@@ -197,6 +239,7 @@ struct BarcodeLabelsView: View {
                 LazyVStack(spacing: 12) {
                     printerPanel(theme)
                     searchPanel(theme)
+                    if !products.isEmpty { quickFilterPanel(theme) }
 
                     if isLoading && products.isEmpty {
                         MomentsCard {
@@ -237,8 +280,17 @@ struct BarcodeLabelsView: View {
                             .frame(maxWidth: .infinity)
                         }
                     } else {
-                        ForEach(products) { product in
+                        ForEach(displayedProducts) { product in
                             productCard(product, theme: theme)
+                        }
+
+                        if displayedProducts.isEmpty && listFilter != .all {
+                            MomentsCard {
+                                Text(listFilter == .favorites ? "Még nincs kedvenc címkéd." : "Még nincs legutóbb nyomtatott címke a betöltött termékek között.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(theme.secondaryText)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
                         }
 
                         if page < pages {
@@ -454,6 +506,15 @@ struct BarcodeLabelsView: View {
                         .foregroundStyle(theme.secondaryText)
                     }
                     Spacer(minLength: 0)
+                    Button {
+                        toggleFavorite(product.id)
+                    } label: {
+                        Image(systemName: favoriteIDs.contains(product.id) ? "star.fill" : "star")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(favoriteIDs.contains(product.id) ? theme.accent2 : theme.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(favoriteIDs.contains(product.id) ? "Eltávolítás a kedvencekből" : "Hozzáadás a kedvencekhez")
                 }
 
                 Divider().overlay(theme.border)
@@ -483,6 +544,37 @@ struct BarcodeLabelsView: View {
         }
     }
 
+    private var displayedProducts: [BarcodeLabelProduct] {
+        switch listFilter {
+        case .all:
+            return products
+        case .favorites:
+            return products.filter { favoriteIDs.contains($0.id) }
+        case .recent:
+            let positions = Dictionary(uniqueKeysWithValues: recentIDs.enumerated().map { ($0.element, $0.offset) })
+            return products.filter { positions[$0.id] != nil }.sorted {
+                (positions[$0.id] ?? Int.max) < (positions[$1.id] ?? Int.max)
+            }
+        }
+    }
+
+    private func quickFilterPanel(_ theme: MomentsPalette) -> some View {
+        MomentsCard {
+            Picker("Címkelista", selection: $listFilter) {
+                ForEach(BarcodeLabelListFilter.allCases) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private func toggleFavorite(_ id: Int) {
+        if favoriteIDs.contains(id) { favoriteIDs.remove(id) }
+        else { favoriteIDs.insert(id) }
+        BarcodeLabelUsageStore.saveFavorites(favoriteIDs)
+    }
+
     private func quantity(for id: Int) -> Int {
         min(100, max(1, quantities[id] ?? 1))
     }
@@ -499,6 +591,7 @@ struct BarcodeLabelsView: View {
         do {
             let job = try T02BarcodeLabelRaster.makeJob(code: product.barcode, quantity: count)
             printer.printLabelRaster(job, quantity: count)
+            recentIDs = BarcodeLabelUsageStore.recordRecent(product.id)
         } catch {
             printMessage = error.localizedDescription
         }

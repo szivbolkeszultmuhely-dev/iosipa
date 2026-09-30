@@ -25,20 +25,27 @@ jobs:
           APP="$RUNNER_TEMP/moments-t02-build/Build/Products/Release-iphoneos/MomentsPOST02.app"
           test -f "$APP/Info.plist"
           BT_DESC=$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$APP/Info.plist")
+          FACE_DESC=$(/usr/libexec/PlistBuddy -c 'Print :NSFaceIDUsageDescription' "$APP/Info.plist")
           VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
           echo "Bluetooth permission: $BT_DESC"
+          echo "Face ID permission: $FACE_DESC"
           echo "Built version: $VERSION"
           echo "$BT_DESC" | grep -q 'AIMO T02'
-          test -n "$VERSION"
+          echo "$FACE_DESC" | grep -q 'Face ID'
+          test "$VERSION" = '1.8.0'
           echo 'OK: compiled application includes Bluetooth permission.'
       - name: Package unsigned IPA (SideStore signs it on device)
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$RUNNER_TEMP/moments-t02-build/Build/Products/Release-iphoneos/MomentsPOST02.app" "$RUNNER_TEMP/Payload/"
           (cd "$RUNNER_TEMP" && /usr/bin/zip -q -r "$GITHUB_WORKSPACE/MomentsPOST02-unsigned.ipa" Payload)
+      - name: Create IPA checksum
+        run: shasum -a 256 MomentsPOST02-unsigned.ipa > MomentsPOST02-unsigned.ipa.sha256
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: MomentsPOST02-unsigned
-          path: MomentsPOST02-unsigned.ipa
-          retention-days: 3
+          path: |
+            MomentsPOST02-unsigned.ipa
+            MomentsPOST02-unsigned.ipa.sha256
+          retention-days: 30
