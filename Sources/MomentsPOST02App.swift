@@ -1,11 +1,10 @@
 import SwiftUI
 import Combine
 import Foundation
+import UIKit
 
 @main
 struct MomentsPOST02App: App {
-    // One printer instance for the whole app. The validated T02 printing
-    // implementation is intentionally untouched by this visual-only release.
     @StateObject private var printer = T02Printer()
     @StateObject private var posWeb = POSWebModel()
 
@@ -34,30 +33,26 @@ struct MomentsPOST02App: App {
                 }
             }
             .onAppear {
-                // Start timing from the first rendered native frame. The POS
-                // web view loads underneath the branded overlay.
                 launchStartedAt = Date()
                 posWeb.loadIfNeeded()
             }
             .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
                 guard ready, showLaunchOverlay else { return }
-                // Avoid a distracting flash on fast/cached launches.
                 let elapsed = Date().timeIntervalSince(launchStartedAt)
-                let remaining = max(0, 0.85 - elapsed)
+                // Keep the branded splash visible long enough to be perceived,
+                // even when the POS page comes from cache immediately.
+                let remaining = max(0, 1.20 - elapsed)
                 DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
                     guard showLaunchOverlay else { return }
-                    withAnimation(.easeOut(duration: 0.32)) {
+                    withAnimation(.easeOut(duration: 0.30)) {
                         showLaunchOverlay = false
                     }
                 }
             }
             .task {
-                // Never trap the user behind the splash if the website is slow
-                // or temporarily unavailable; the existing POS error UI remains
-                // accessible after this fallback timeout.
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 guard showLaunchOverlay else { return }
-                withAnimation(.easeOut(duration: 0.32)) {
+                withAnimation(.easeOut(duration: 0.30)) {
                     showLaunchOverlay = false
                 }
             }
@@ -66,6 +61,11 @@ struct MomentsPOST02App: App {
 }
 
 private struct MomentsLaunchOverlay: View {
+    private var splashImage: UIImage? {
+        guard let path = Bundle.main.path(forResource: "SplashLogo", ofType: "jpg") else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -80,17 +80,26 @@ private struct MomentsLaunchOverlay: View {
             .ignoresSafeArea()
 
             VStack(spacing: 24) {
-                Image("LaunchLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 224, height: 224)
-                    .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
+                if let splashImage {
+                    Image(uiImage: splashImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 224, height: 224)
+                        .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                        .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
+                } else {
+                    // Fallback should never normally be needed, but prevents an
+                    // empty splash even if a resource is accidentally omitted.
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 96))
+                        .foregroundStyle(.white)
+                }
 
                 ProgressView()
                     .tint(Color(red: 0.96, green: 0.22, blue: 0.83))
                     .scaleEffect(1.08)
 
-                Text("Betöltés…")
+                Text("Kassza betöltése…")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.82))
             }

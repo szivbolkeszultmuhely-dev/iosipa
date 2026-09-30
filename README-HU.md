@@ -1,18 +1,18 @@
-# Moments POS iOS 1.6.1 – rendszer-gesztus javítás
+# Moments POS iOS 1.6.2 – splash logo fix
 
-Ez a patch kumulatív az 1.6.0 splash screen frissítéssel.
+Ez a patch az 1.6.1-re épül.
 
-Változás:
-- a kassza WKWebView böngésző jellegű vissza/előre swipe gesztusai ki vannak kapcsolva;
-- a Moments POS nem kér rendszer-szélgesztus elsőbbséget;
-- a splash screen és betöltő overlay változatlanul benne van;
-- T02 nyugta- és vonalkódnyomtatási kódhoz nem nyúl.
+Javítások:
+- külön `SplashLogo.jpg` bundle erőforrás, hogy a SwiftUI betöltőképernyő biztosan meg tudja jeleníteni a Moments POS ikont;
+- külön natív `LaunchScreen.storyboard`, középre helyezett Moments POS logóval;
+- minimum 1,2 másodpercig látható alkalmazáson belüli splash, hogy gyors cache-es induláskor se villanjon át észrevétlenül;
+- az 1.6.1 gesztusjavítása változatlanul megmarad.
 
-Bemásolandó az iosipa projektbe:
+Másold be az iosipa projektbe:
 - project.yml
 - Sources/MomentsPOST02App.swift
 - Sources/POSWebView.swift
-- teljes Resources/Assets.xcassets mappa
+- Resources/SplashLogo.jpg
+- Resources/LaunchScreen.storyboard
 
-GitHub Desktop Summary:
-Fix iOS notification swipe gestures
+Fontos: az iOS a natív launch screent gyorsítótárazhatja. Ha frissítés után a legelső statikus képernyő még régi, az alkalmazáson belüli splash már az új logót mutatja. A natív cache frissülhet újraindítás után; ha tartósan nem, az app újratelepítése kényszeríti az új launch screen használatát.
