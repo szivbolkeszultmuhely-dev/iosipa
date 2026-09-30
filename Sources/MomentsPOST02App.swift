@@ -7,55 +7,85 @@ import UIKit
 struct MomentsPOST02App: App {
     @StateObject private var printer = T02Printer()
     @StateObject private var posWeb = POSWebModel()
+    @StateObject private var preferences = MomentsPreferences()
+    @StateObject private var appUI = MomentsAppUIState()
 
     @State private var showLaunchOverlay = true
     @State private var launchStartedAt = Date()
 
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                TabView {
-                    POSWebScreen(model: posWeb)
-                        .tabItem { Label("Kassza", systemImage: "creditcard") }
+            MomentsThemeReader { theme in
+                ZStack {
+                    theme.background.ignoresSafeArea()
 
-                    TestView()
-                        .tabItem { Label("T02 próba", systemImage: "printer") }
+                    TabView {
+                        POSWebScreen(model: posWeb)
+                            .tabItem { Label("Kassza", systemImage: "creditcard.fill") }
 
-                    BarcodeLabelsView(posWeb: posWeb)
-                        .tabItem { Label("Vonalkódok", systemImage: "barcode.viewfinder") }
+                        TestView()
+                            .tabItem { Label("T02 próba", systemImage: "printer.fill") }
+
+                        BarcodeLabelsView(posWeb: posWeb)
+                            .tabItem { Label("Vonalkódok", systemImage: "barcode.viewfinder") }
+                    }
+                    .tint(preferences.appearance == .moments ? theme.accent2 : theme.accent)
+                    .toolbarBackground(theme.tabBar, for: .tabBar)
+                    .toolbarBackground(.visible, for: .tabBar)
+                    .toolbarColorScheme(theme.tabBarScheme, for: .tabBar)
+                    .environmentObject(printer)
+                    .environmentObject(preferences)
+                    .environmentObject(appUI)
+                    .dynamicTypeSize(preferences.largeText ? .large : .medium)
+
+                    if showLaunchOverlay && preferences.showBrandedLoader {
+                        MomentsLaunchOverlay()
+                            .transition(.opacity)
+                            .zIndex(100)
+                    }
                 }
-                .environmentObject(printer)
-
-                if showLaunchOverlay {
-                    MomentsLaunchOverlay()
-                        .transition(.opacity)
-                        .zIndex(100)
+                .environmentObject(preferences)
+                .environmentObject(appUI)
+                .onAppear {
+                    launchStartedAt = Date()
+                    posWeb.loadIfNeeded()
+                    if preferences.autoScanPrinter {
+                        printer.startIfPossible()
+                    }
+                    if !preferences.showBrandedLoader {
+                        showLaunchOverlay = false
+                    }
                 }
-            }
-            .onAppear {
-                launchStartedAt = Date()
-                posWeb.loadIfNeeded()
-            }
-            .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
-                guard ready, showLaunchOverlay else { return }
-                let elapsed = Date().timeIntervalSince(launchStartedAt)
-                // Keep the branded splash visible long enough to be perceived,
-                // even when the POS page comes from cache immediately.
-                let remaining = max(0, 1.20 - elapsed)
-                DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
+                .onChange(of: preferences.autoScanPrinter) { enabled in
+                    if enabled { printer.startIfPossible() }
+                }
+                .onChange(of: preferences.showBrandedLoader) { enabled in
+                    if !enabled { showLaunchOverlay = false }
+                }
+                .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
+                    guard ready, showLaunchOverlay, preferences.showBrandedLoader else { return }
+                    let elapsed = Date().timeIntervalSince(launchStartedAt)
+                    let remaining = max(0, 1.20 - elapsed)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
+                        guard showLaunchOverlay else { return }
+                        withAnimation(.easeOut(duration: 0.30)) {
+                            showLaunchOverlay = false
+                        }
+                    }
+                }
+                .task {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
                     guard showLaunchOverlay else { return }
                     withAnimation(.easeOut(duration: 0.30)) {
                         showLaunchOverlay = false
                     }
                 }
-            }
-            .task {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                guard showLaunchOverlay else { return }
-                withAnimation(.easeOut(duration: 0.30)) {
-                    showLaunchOverlay = false
+                .sheet(isPresented: $appUI.settingsPresented) {
+                    MomentsSettingsView(printer: printer, posWeb: posWeb)
+                        .environmentObject(preferences)
                 }
             }
+            .environmentObject(preferences)
         }
     }
 }
@@ -88,8 +118,6 @@ private struct MomentsLaunchOverlay: View {
                         .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
                         .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
                 } else {
-                    // Fallback should never normally be needed, but prevents an
-                    // empty splash even if a resource is accidentally omitted.
                     Image(systemName: "creditcard.fill")
                         .font(.system(size: 96))
                         .foregroundStyle(.white)

@@ -232,58 +232,81 @@ extension POSWebModel: WKUIDelegate {
 
 struct POSWebScreen: View {
     @ObservedObject var model: POSWebModel
+    @EnvironmentObject private var preferences: MomentsPreferences
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Moments POS · Kassza").font(.headline)
-                    Text("Eredeti PDF és közvetlen T02-nyomtatás a kasszából.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 4)
-                Button { model.reload() } label: {
-                    Image(systemName: "arrow.clockwise").font(.title3)
-                }
-                .accessibilityLabel("Kassza újratöltése")
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+        let theme = MomentsPalette.make(mode: preferences.appearance, colorScheme: colorScheme)
 
-            if model.isLoading { ProgressView().frame(maxWidth: .infinity) }
-            if model.pdfIsLoading {
-                HStack { ProgressView(); Text("Az eredeti PDF átvétele…") }
-                    .font(.footnote).padding(8).frame(maxWidth: .infinity)
+        VStack(spacing: 0) {
+            MomentsHeader(
+                title: "Moments POS · Kassza",
+                subtitle: "Eredeti PDF és közvetlen T02-nyomtatás a kasszából.",
+                systemImage: "creditcard.fill",
+                reloadAction: { model.reload() }
+            )
+
+            if model.isLoading {
+                ProgressView()
+                    .tint(theme.accent2)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .background(theme.surface)
             }
+
+            if model.pdfIsLoading {
+                HStack(spacing: 8) {
+                    ProgressView().tint(theme.accent)
+                    Text("Az eredeti PDF átvétele…")
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(theme.text)
+                .padding(8)
+                .frame(maxWidth: .infinity)
+                .background(theme.surfaceAlt)
+            }
+
             if let pdfError = model.pdfError {
-                Text(pdfError).font(.footnote).foregroundStyle(.red)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
+                Text(pdfError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .background(theme.surface)
             }
 
             if let errorMessage = model.errorMessage {
                 VStack(spacing: 10) {
-                    Text(errorMessage).font(.subheadline).multilineTextAlignment(.center)
+                    Text(errorMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(theme.text)
+                        .multilineTextAlignment(.center)
                     HStack(spacing: 14) {
                         Button("Újratöltés") { model.reload() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(MomentsPrimaryButtonStyle())
                         Button("Megnyitás Safariban") { model.openInSafari() }
                             .buttonStyle(.bordered)
+                            .tint(theme.accent)
                     }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity)
+                .background(theme.surface)
             }
 
+            // IMPORTANT: the WordPress cashier itself is not restyled.
+            // Only the native shell around the validated web cashier changes.
             POSWebContainer(model: model)
         }
+        .background(theme.background)
         .onAppear { model.loadIfNeeded() }
         .sheet(item: $model.receivedPDF) { receipt in
             ReceiptPDFPreview(receipt: receipt)
         }
     }
 }
+
 
 private struct POSWebContainer: UIViewRepresentable {
     let model: POSWebModel

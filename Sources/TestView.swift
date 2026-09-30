@@ -3,69 +3,104 @@ import UIKit
 
 struct TestView: View {
     @EnvironmentObject private var printer: T02Printer
+    @EnvironmentObject private var preferences: MomentsPreferences
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("AIMO T02 · natív teszt")
-                            .font(.title2.bold())
-                        Text("1. lépés / 6 · Közvetlen Bluetooth, külső nyomtatóapp nélkül.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.bottom, 4)
+        let theme = MomentsPalette.make(mode: preferences.appearance, colorScheme: colorScheme)
 
-                    GroupBox("Bluetooth") {
+        VStack(spacing: 0) {
+            MomentsHeader(
+                title: "T02 próba",
+                subtitle: "Közvetlen Bluetooth diagnosztika és tesztnyomat",
+                systemImage: "printer.fill"
+            )
+
+            ScrollView {
+                VStack(spacing: 14) {
+                    MomentsCard {
                         VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 8) {
-                                Circle().fill(printer.isReady ? Color.green : Color.orange)
-                                    .frame(width: 10, height: 10)
-                                Text(printer.status).font(.subheadline)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("Bluetooth kapcsolat")
+                                        .font(.headline)
+                                        .foregroundStyle(theme.text)
+                                    MomentsStatusPill(
+                                        ready: printer.isReady,
+                                        text: printer.isReady ? "T02 nyomtatásra kész" : printer.status
+                                    )
+                                }
+                                Spacer()
+                                Image(systemName: printer.isReady ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .foregroundStyle(printer.isReady ? theme.good : theme.accent)
                             }
-                            Button(printer.isScanning ? "Keresés leállítása" : "T02 keresése") {
+
+                            Button {
                                 if printer.isScanning { printer.stopScan() }
                                 else { printer.scan() }
+                            } label: {
+                                Label(
+                                    printer.isScanning ? "Keresés leállítása" : "T02 keresése",
+                                    systemImage: printer.isScanning ? "stop.fill" : "dot.radiowaves.left.and.right"
+                                )
+                                .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(MomentsPrimaryButtonStyle())
                             .disabled(printer.isPrinting)
 
-                            if printer.devices.isEmpty {
-                                Text("A nyomtatókat itt soroljuk fel. Első alkalommal engedélyezd az iPhone Bluetooth-hozzáférést.")
-                                    .font(.caption).foregroundStyle(.secondary)
+                            if printer.devices.isEmpty && !printer.isReady {
+                                Text("Első alkalommal engedélyezd az iPhone Bluetooth-hozzáférését. A T02-nek bekapcsolva és a közelben kell lennie.")
+                                    .font(.caption)
+                                    .foregroundStyle(theme.secondaryText)
                             }
+
                             ForEach(printer.devices) { device in
                                 Button {
                                     printer.connect(to: device.id)
                                 } label: {
                                     HStack {
-                                        VStack(alignment: .leading) {
-                                            Text(device.name).fontWeight(.semibold)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(device.name)
+                                                .fontWeight(.bold)
                                             Text("Jelerősség: \(device.rssi) dBm")
-                                                .font(.caption).foregroundStyle(.secondary)
+                                                .font(.caption)
                                         }
                                         Spacer()
-                                        Image(systemName: "link")
+                                        Image(systemName: "link.circle.fill")
+                                            .font(.title3)
                                     }
+                                    .foregroundStyle(theme.text)
+                                    .padding(11)
+                                    .background(theme.surfaceAlt)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.plain)
                                 .disabled(printer.isPrinting)
                             }
+
                             if printer.isReady {
-                                Button("Kapcsolat bontása") { printer.disconnect() }
-                                    .buttonStyle(.bordered)
-                                    .tint(.secondary)
+                                Button {
+                                    printer.disconnect()
+                                } label: {
+                                    Label("Kapcsolat bontása", systemImage: "xmark.circle")
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(theme.secondaryText)
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 6)
                     }
 
-                    GroupBox("Tesztnyomat") {
+                    MomentsCard {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("A nyomtatóra egy rövid, 384 képpont széles tesztképet küldünk. Nem adóügyi bizonylat.")
+                            Label("Tesztnyomat", systemImage: "doc.text.image")
+                                .font(.headline)
+                                .foregroundStyle(theme.text)
+
+                            Text("Egy rövid, 384 képpont széles tesztképet küldünk a T02-re. Ez nem adóügyi bizonylat.")
                                 .font(.subheadline)
+                                .foregroundStyle(theme.secondaryText)
+
                             Button {
                                 printer.printTest()
                             } label: {
@@ -76,35 +111,48 @@ struct TestView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(Color(red: 0.32, green: 0.48, blue: 0.40))
+                            .buttonStyle(MomentsPrimaryButtonStyle())
                             .disabled(!printer.isReady || printer.isPrinting)
-                            Text("Sikeres adatküldés után is nézd meg, hogy a teljes minta valóban kijött-e a papírra.")
-                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    GroupBox("Hibakeresési napló") {
+                    MomentsCard {
                         VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Label("Hibakeresési napló", systemImage: "terminal.fill")
+                                    .font(.headline)
+                                    .foregroundStyle(theme.text)
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = printer.logText
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                                .tint(theme.accent)
+                                .accessibilityLabel("Napló másolása")
+                            }
+
                             ScrollView {
                                 Text(printer.logText)
                                     .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(theme.text)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .frame(minHeight: 160, maxHeight: 260)
-                            Button("Napló másolása") { UIPasteboard.general.string = printer.logText }
-                                .buttonStyle(.bordered)
+                            .frame(minHeight: 150, maxHeight: 250)
+                            .padding(10)
+                            .background(theme.field)
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding()
+                .padding(14)
             }
-            .navigationTitle("Moments POS")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { printer.startIfPossible() }
+            .background(theme.background)
+        }
+        .background(theme.background.ignoresSafeArea())
+        .onAppear {
+            if preferences.autoScanPrinter { printer.startIfPossible() }
         }
     }
 }

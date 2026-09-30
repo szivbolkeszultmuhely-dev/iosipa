@@ -133,6 +133,8 @@ extension POSWebModel {
 struct BarcodeLabelsView: View {
     @ObservedObject var posWeb: POSWebModel
     @EnvironmentObject private var printer: T02Printer
+    @EnvironmentObject private var preferences: MomentsPreferences
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var products: [BarcodeLabelProduct] = []
     @State private var quantities: [Int: Int] = [:]
@@ -147,216 +149,295 @@ struct BarcodeLabelsView: View {
     @State private var firstLoadRequested = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                printerPanel
-                Divider()
-                searchPanel
+        let theme = MomentsPalette.make(mode: preferences.appearance, colorScheme: colorScheme)
 
-                if isLoading && products.isEmpty {
-                    Spacer()
-                    ProgressView("Vonalkódos termékek betöltése…")
-                    Spacer()
-                } else if let errorMessage, products.isEmpty {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle).foregroundStyle(.orange)
-                        Text(errorMessage)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                        Button("Újrapróbálom") { loadProducts(reset: true) }
-                            .buttonStyle(.borderedProminent)
-                    }
-                    .padding(24)
-                    Spacer()
-                } else if products.isEmpty {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Image(systemName: "barcode")
-                            .font(.largeTitle).foregroundStyle(.secondary)
-                        Text(loadedSearch.isEmpty
-                             ? "Nincs még nyomtatható kasszavonalkód."
-                             : "Nincs találat erre a keresésre.")
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(products) { product in
-                                productCard(product)
+        VStack(spacing: 0) {
+            MomentsHeader(
+                title: "Vonalkódok",
+                subtitle: total > 0 ? "\(total) nyomtatható termék" : "Termékcímkék közvetlenül a T02-re",
+                systemImage: "barcode.viewfinder"
+            )
+
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    printerPanel(theme)
+                    searchPanel(theme)
+
+                    if isLoading && products.isEmpty {
+                        MomentsCard {
+                            HStack(spacing: 12) {
+                                ProgressView().tint(theme.accent)
+                                Text("Vonalkódos termékek betöltése…")
+                                    .foregroundStyle(theme.text)
                             }
-
-                            if page < pages {
-                                Button {
-                                    loadProducts(reset: false)
-                                } label: {
-                                    if isLoading {
-                                        ProgressView()
-                                    } else {
-                                        Text("További termékek betöltése")
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .padding(.vertical, 8)
-                                .disabled(isLoading)
-                            }
-
-                            Text("\(total) vonalkódos termék")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.bottom, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(12)
+                    } else if let errorMessage, products.isEmpty {
+                        MomentsCard {
+                            VStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundStyle(theme.warning)
+                                Text(errorMessage)
+                                    .font(.subheadline)
+                                    .foregroundStyle(theme.text)
+                                    .multilineTextAlignment(.center)
+                                Button("Újrapróbálom") { loadProducts(reset: true) }
+                                    .buttonStyle(MomentsPrimaryButtonStyle())
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    } else if products.isEmpty {
+                        MomentsCard {
+                            VStack(spacing: 9) {
+                                Image(systemName: "barcode")
+                                    .font(.system(size: 34, weight: .medium))
+                                    .foregroundStyle(theme.accent)
+                                Text(loadedSearch.isEmpty
+                                     ? "Nincs még nyomtatható kasszavonalkód."
+                                     : "Nincs találat erre a keresésre.")
+                                    .foregroundStyle(theme.text)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        ForEach(products) { product in
+                            productCard(product, theme: theme)
+                        }
+
+                        if page < pages {
+                            Button {
+                                loadProducts(reset: false)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isLoading { ProgressView().tint(.white) }
+                                    Text(isLoading ? "Betöltés…" : "További termékek betöltése")
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(MomentsPrimaryButtonStyle())
+                            .disabled(isLoading)
+                        }
+
+                        Text("\(total) vonalkódos termék")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(theme.secondaryText)
+                            .padding(.vertical, 5)
                     }
-                    .refreshable { loadProducts(reset: true) }
                 }
+                .padding(14)
             }
-            .navigationTitle("Vonalkódok")
-            .navigationBarTitleDisplayMode(.inline)
-            .alert("Vonalkódnyomtatás", isPresented: Binding(
-                get: { printMessage != nil },
-                set: { if !$0 { printMessage = nil } }
-            )) {
-                Button("OK") { printMessage = nil }
-            } message: {
-                Text(printMessage ?? "")
-            }
-            .onAppear {
-                posWeb.loadIfNeeded()
-                printer.startIfPossible()
-                if !firstLoadRequested {
-                    firstLoadRequested = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        loadProducts(reset: true)
-                    }
+            .background(theme.background)
+            .refreshable { loadProducts(reset: true) }
+        }
+        .background(theme.background.ignoresSafeArea())
+        .alert("Vonalkódnyomtatás", isPresented: Binding(
+            get: { printMessage != nil },
+            set: { if !$0 { printMessage = nil } }
+        )) {
+            Button("OK") { printMessage = nil }
+        } message: {
+            Text(printMessage ?? "")
+        }
+        .onAppear {
+            posWeb.loadIfNeeded()
+            if preferences.autoScanPrinter { printer.startIfPossible() }
+            if !firstLoadRequested {
+                firstLoadRequested = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    loadProducts(reset: true)
                 }
             }
         }
     }
 
-    private var printerPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Circle()
-                    .fill(printer.isReady ? Color.green : Color.orange)
-                    .frame(width: 9, height: 9)
-                Text(printer.isReady ? "T02 nyomtatásra kész" : printer.status)
-                    .font(.footnote)
-                    .lineLimit(2)
-                Spacer()
-                if !printer.isReady {
-                    Button(printer.isScanning ? "Keresés…" : "T02 keresése") {
-                        printer.scan()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(printer.isScanning || printer.isPrinting)
-                }
-            }
-
-            if !printer.isReady {
-                ForEach(printer.devices) { device in
-                    Button("Csatlakozás: \(device.name)") {
-                        printer.connect(to: device.id)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(printer.isPrinting)
-                }
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-
-    private var searchPanel: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("Terméknév, SKU vagy vonalkód", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onSubmit { loadProducts(reset: true) }
-
-                Button("Keresés") { loadProducts(reset: true) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isLoading)
-            }
-
-            if !loadedSearch.isEmpty {
+    private func printerPanel(_ theme: MomentsPalette) -> some View {
+        MomentsCard {
+            VStack(alignment: .leading, spacing: 11) {
                 HStack {
-                    Text("Szűrés: \(loadedSearch)")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Törlés") {
-                        searchText = ""
-                        loadProducts(reset: true)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("T02 nyomtató")
+                            .font(.headline)
+                            .foregroundStyle(theme.text)
+                        MomentsStatusPill(
+                            ready: printer.isReady,
+                            text: printer.isReady ? "Nyomtatásra kész" : printer.status
+                        )
                     }
-                    .font(.caption)
+                    Spacer()
+                    Image(systemName: printer.isReady ? "printer.fill" : "printer")
+                        .font(.system(size: 25, weight: .semibold))
+                        .foregroundStyle(printer.isReady ? theme.good : theme.accent)
+                }
+
+                if !printer.isReady {
+                    Button {
+                        printer.scan()
+                    } label: {
+                        Label(printer.isScanning ? "Keresés…" : "T02 keresése", systemImage: "dot.radiowaves.left.and.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(MomentsPrimaryButtonStyle())
+                    .disabled(printer.isScanning || printer.isPrinting)
+
+                    ForEach(printer.devices) { device in
+                        Button {
+                            printer.connect(to: device.id)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(device.name).fontWeight(.semibold)
+                                    Text("Jelerősség: \(device.rssi) dBm")
+                                        .font(.caption)
+                                }
+                                Spacer()
+                                Image(systemName: "link")
+                            }
+                            .foregroundStyle(theme.text)
+                            .padding(10)
+                            .background(theme.surfaceAlt)
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(printer.isPrinting)
+                    }
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+    }
+
+    private func searchPanel(_ theme: MomentsPalette) -> some View {
+        MomentsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Termék keresése")
+                    .font(.headline)
+                    .foregroundStyle(theme.text)
+
+                HStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(theme.secondaryText)
+                        TextField("Név, SKU vagy vonalkód", text: $searchText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .foregroundStyle(theme.text)
+                            .onSubmit { loadProducts(reset: true) }
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 10)
+                    .background(theme.field)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(theme.border, lineWidth: 1)
+                    )
+
+                    Button {
+                        loadProducts(reset: true)
+                    } label: {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(MomentsPrimaryButtonStyle())
+                    .disabled(isLoading)
+                }
+
+                if !loadedSearch.isEmpty {
+                    HStack {
+                        Label(loadedSearch, systemImage: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                        Spacer()
+                        Button("Szűrés törlése") {
+                            searchText = ""
+                            loadProducts(reset: true)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .tint(theme.accent)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
-    private func productCard(_ product: BarcodeLabelProduct) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                if let url = URL(string: product.image), !product.image.isEmpty {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Color.secondary.opacity(0.12)
-                    }
-                    .frame(width: 54, height: 54)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(product.name)
-                        .font(.subheadline.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(product.barcode)
-                        .font(.system(.footnote, design: .monospaced).weight(.semibold))
-                    HStack(spacing: 8) {
-                        if !product.sku.isEmpty {
-                            Text("SKU: \(product.sku)")
+    private func productCard(_ product: BarcodeLabelProduct, theme: MomentsPalette) -> some View {
+        MomentsCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    if let url = URL(string: product.image), !product.image.isEmpty {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            ZStack {
+                                theme.surfaceAlt
+                                Image(systemName: "photo")
+                                    .foregroundStyle(theme.secondaryText)
+                            }
                         }
-                        if !product.formattedPrice.isEmpty {
-                            Text(product.formattedPrice)
+                        .frame(width: 62, height: 62)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    } else {
+                        ZStack {
+                            theme.surfaceAlt
+                            Image(systemName: "cube.box.fill")
+                                .foregroundStyle(theme.accent)
+                        }
+                        .frame(width: 62, height: 62)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(product.name)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(theme.text)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(product.barcode)
+                            .font(.system(.footnote, design: .monospaced).weight(.bold))
+                            .foregroundStyle(theme.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(theme.surfaceAlt)
+                            .clipShape(Capsule())
+
+                        HStack(spacing: 8) {
+                            if !product.sku.isEmpty { Text("SKU: \(product.sku)") }
+                            if !product.formattedPrice.isEmpty { Text(product.formattedPrice) }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                Divider().overlay(theme.border)
+
+                HStack(spacing: 12) {
+                    Stepper(value: quantityBinding(for: product.id), in: 1...100) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Címkedarab")
+                                .font(.caption)
+                                .foregroundStyle(theme.secondaryText)
+                            Text("\(quantity(for: product.id)) db")
+                                .font(.subheadline.weight(.bold).monospacedDigit())
+                                .foregroundStyle(theme.text)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
+                    .tint(theme.accent)
 
-            HStack(spacing: 12) {
-                Stepper(
-                    value: quantityBinding(for: product.id),
-                    in: 1...100
-                ) {
-                    Text("\(quantity(for: product.id)) db")
-                        .font(.subheadline.monospacedDigit())
-                        .frame(minWidth: 46, alignment: .leading)
+                    Button {
+                        print(product)
+                    } label: {
+                        Label("Nyomtatás", systemImage: "printer.fill")
+                    }
+                    .buttonStyle(MomentsPrimaryButtonStyle())
+                    .disabled(!printer.isReady || printer.isPrinting)
                 }
-
-                Button {
-                    print(product)
-                } label: {
-                    Label("Nyomtatás", systemImage: "printer.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!printer.isReady || printer.isPrinting)
             }
         }
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private func quantity(for id: Int) -> Int {
