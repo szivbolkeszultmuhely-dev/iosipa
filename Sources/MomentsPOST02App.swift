@@ -104,28 +104,30 @@ struct MomentsPOST02App: App {
 private struct MomentsLaunchOverlay: View {
     var body: some View {
         ZStack {
-            // The Moments POS mark is baked into this full-screen image.
-            // Using one centered composite avoids launch-screen image lookup issues
-            // and keeps the mark geometrically centered on every iPhone size.
-            Image("LaunchComposite")
-                .resizable()
-                .scaledToFill()
+            Color(red: 0.18, green: 0.08, blue: 0.41)
                 .ignoresSafeArea()
+
+            // Guaranteed logo: PNG bytes are embedded in the executable itself.
+            // ZStack centers the mark independently of screen size / safe area.
+            if let logo = MomentsEmbeddedLaunchLogo.image {
+                Image(uiImage: logo)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 290, maxHeight: 290)
+                    .padding(.horizontal, 54)
+            }
 
             VStack(spacing: 10) {
                 Spacer()
-
                 ProgressView()
                     .tint(Color(red: 0.96, green: 0.22, blue: 0.83))
                     .scaleEffect(1.08)
-
                 Text("Kassza betöltése…")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.86))
             }
             .padding(.bottom, 76)
         }
-        .background(Color(red: 0.18, green: 0.08, blue: 0.41))
         .defersSystemGestures(on: [])
         .persistentSystemOverlays(.visible)
         .accessibilityElement(children: .combine)

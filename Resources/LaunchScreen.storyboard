@@ -14,7 +14,7 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" image="LaunchComposite" translatesAutoresizingMaskIntoConstraints="NO" id="bg-image">
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" image="LaunchBackground.png" translatesAutoresizingMaskIntoConstraints="NO" id="bg-image">
                                 <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                             </imageView>
                         </subviews>
@@ -34,6 +34,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="LaunchComposite" width="430" height="932"/>
+        <image name="LaunchBackground.png" width="1290" height="2796"/>
     </resources>
 </document>

@@ -21,6 +21,7 @@ targets:
     resources:
       - path: Resources/Assets.xcassets
       - path: Resources/LaunchScreen.storyboard
+      - path: Resources/LaunchBackground.png
     info:
       # XcodeGen REGENERATES Info.plist from these properties. It does not
       # preserve entries manually written to Resources/Info.plist.
@@ -28,8 +29,8 @@ targets:
       properties:
         CFBundleDevelopmentRegion: hu
         CFBundleDisplayName: Moments POS
-        CFBundleShortVersionString: '1.7.2'
-        CFBundleVersion: '18'
+        CFBundleShortVersionString: '1.7.3'
+        CFBundleVersion: '19'
         LSRequiresIPhoneOS: true
         NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy nyugtát tudjon nyomtatni.'
         NSCameraUsageDescription: 'A Moments POS a termékek vonalkódjának beolvasásához kéri a kamerához való hozzáférést.'
