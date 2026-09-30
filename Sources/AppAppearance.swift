@@ -100,10 +100,10 @@ struct MomentsPalette {
                 accent: Color(red: 0.376, green: 0.145, blue: 0.690),
                 accent2: Color(red: 0.914, green: 0.176, blue: 0.773),
                 header: Color(red: 0.165, green: 0.055, blue: 0.330),
-                tabBar: Color(red: 0.125, green: 0.035, blue: 0.270),
+                tabBar: Color(red: 0.945, green: 0.925, blue: 0.975),
                 good: Color(red: 0.130, green: 0.580, blue: 0.380),
                 warning: Color(red: 0.820, green: 0.490, blue: 0.120),
-                tabBarScheme: .dark
+                tabBarScheme: .light
             )
 
         case .contrast:

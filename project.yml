@@ -20,7 +20,6 @@ targets:
       - path: Sources
     resources:
       - path: Resources/Assets.xcassets
-      - path: Resources/SplashLogo.jpg
       - path: Resources/LaunchScreen.storyboard
     info:
       # XcodeGen REGENERATES Info.plist from these properties. It does not
@@ -29,8 +28,8 @@ targets:
       properties:
         CFBundleDevelopmentRegion: hu
         CFBundleDisplayName: Moments POS
-        CFBundleShortVersionString: '1.7.0'
-        CFBundleVersion: '16'
+        CFBundleShortVersionString: '1.7.1'
+        CFBundleVersion: '17'
         LSRequiresIPhoneOS: true
         NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy nyugtát tudjon nyomtatni.'
         NSCameraUsageDescription: 'A Moments POS a termékek vonalkódjának beolvasásához kéri a kamerához való hozzáférést.'

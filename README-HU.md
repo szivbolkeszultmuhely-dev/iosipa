@@ -1,50 +1,31 @@
-# Moments POS iOS 1.7.0 – Visual Refresh
+# Moments POS iOS 1.7.1 – splash, tabbar és rendszer-gesztus javítás
 
-Ez egy kumulatív iOS patch a jelenlegi működő Moments POS fölé.
+Kumulatív patch az 1.7.0 fölé.
 
-## Mi változik?
-- új **Moments** natív téma (lila/pink, világosabb kártyák)
-- **Kontrasztos** mód
-- **Rendszer** mód
-- jobb felső **Beállítások** fogaskerék a Kassza / T02 próba / Vonalkódok képernyőn
-- nagyobb natív betűméret kapcsoló
-- márkázott betöltőanimáció be/ki
-- T02 automatikus keresés appindításkor be/ki
-- T02 és WordPress állapot + appverzió a Beállításokban
-- új, egységes márkázott felső sáv
-- színesebb alsó tabbar
-- újradizájnolt **T02 próba** natív képernyő
-- újradizájnolt **Vonalkódok** natív képernyő
-- tartalmazza az 1.6.2 splash-logo és gesture javítást
-- tartalmazza a validált 1.5.1 vonalkód-címke papírtovábbítást
+## Javítások
 
-## Mi NEM változik?
-- A WordPressből betöltött **Kassza belső HTML/CSS felülete változatlan**.
-- A validált T02 nyugta-raszter és Bluetooth transport nem lett átírva.
-- A Billingo/PDF nyomtatási logikát nem módosítja.
+- A felhasználó által újra feltöltött Moments POS ikon közvetlenül az Asset Catalogba került `SplashLogo` néven.
+- A natív LaunchScreen és az appon belüli betöltőoverlay ugyanazt az assetet használja.
+- Az AppIcon készlet is a feltöltött eredeti ikonból lett újragenerálva.
+- Moments témában az alsó tabbar világos lilás hátteret, sötétlila kiválasztott és sötét szürkés-lila nem kiválasztott ikon/feliratszínt kapott.
+- A tabbar UIKit megjelenése explicit be van állítva, hogy az újabb iOS anyaghatások se mossák el a feliratokat.
+- A WebView böngésző-vissza/előre gesztusa továbbra is kikapcsolt.
+- A teljes app explicit nem kér rendszer-szélgesztus elsőbbséget (`defersSystemGestures(on: [])`).
+- A rendszer overlayek láthatósága explicit `.visible`.
+- A WKWebView görgetőgesztusa nem törli/delayeli agresszíven a touch eseményeket.
 
-## Bemásolandó fájlok
-Másold az `iosipa` projektedbe a ZIP teljes tartalmát, a mappastruktúrát megtartva:
+## Nem változott
 
-- `project.yml`
-- `Sources/AppAppearance.swift` (új)
-- `Sources/MomentsUI.swift` (új)
-- `Sources/MomentsPOST02App.swift`
-- `Sources/POSWebView.swift`
-- `Sources/BarcodeLabelsView.swift`
-- `Sources/TestView.swift`
-- `Sources/T02BarcodeLabelRaster.swift`
-- `Resources/SplashLogo.jpg`
-- `Resources/LaunchScreen.storyboard`
-- `Resources/Assets.xcassets/...`
+- Kassza webes belseje / WordPress CSS
+- Billingo PDF → T02 nyomtatás
+- validált T02 raster motor
+- Vonalkódcímke nyomtatás és feed
+- WordPress API
 
-Felülírás: igen.
+## Telepítés
 
-## GitHub Desktop Summary
-`Add Moments POS visual refresh and appearance settings`
+A ZIP teljes tartalmát másold a meglévő `iosipa` repo gyökerébe, a mappastruktúrát megtartva, majd engedélyezd a felülírást.
 
-Majd: Commit → Push origin → GitHub Actions → Run workflow → IPA → SideStore.
+GitHub Desktop Summary:
 
-## Verzió
-- 1.7.0
-- build 16
+`Fix splash logo, tab bar contrast and system gestures`

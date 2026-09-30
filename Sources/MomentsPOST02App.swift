@@ -29,10 +29,21 @@ struct MomentsPOST02App: App {
                         BarcodeLabelsView(posWeb: posWeb)
                             .tabItem { Label("Vonalkódok", systemImage: "barcode.viewfinder") }
                     }
-                    .tint(preferences.appearance == .moments ? theme.accent2 : theme.accent)
+                    .tint(theme.accent)
                     .toolbarBackground(theme.tabBar, for: .tabBar)
                     .toolbarBackground(.visible, for: .tabBar)
                     .toolbarColorScheme(theme.tabBarScheme, for: .tabBar)
+                    .background(
+                        MomentsTabBarStyleApplier(
+                            mode: preferences.appearance,
+                            colorScheme: theme.tabBarScheme
+                        )
+                        .frame(width: 0, height: 0)
+                    )
+                    // Explicitly keep all screen-edge system gestures owned by iOS.
+                    // The POS app never needs immersive edge-gesture priority.
+                    .defersSystemGestures(on: [])
+                    .persistentSystemOverlays(.visible)
                     .environmentObject(printer)
                     .environmentObject(preferences)
                     .environmentObject(appUI)
@@ -91,11 +102,6 @@ struct MomentsPOST02App: App {
 }
 
 private struct MomentsLaunchOverlay: View {
-    private var splashImage: UIImage? {
-        guard let path = Bundle.main.path(forResource: "SplashLogo", ofType: "jpg") else { return nil }
-        return UIImage(contentsOfFile: path)
-    }
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -110,18 +116,14 @@ private struct MomentsLaunchOverlay: View {
             .ignoresSafeArea()
 
             VStack(spacing: 24) {
-                if let splashImage {
-                    Image(uiImage: splashImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 224, height: 224)
-                        .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
-                        .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
-                } else {
-                    Image(systemName: "creditcard.fill")
-                        .font(.system(size: 96))
-                        .foregroundStyle(.white)
-                }
+                // Asset-catalog image generated directly from the supplied Moments POS icon.
+                // This avoids bundle-path / filename lookup differences on signed IPA builds.
+                Image("SplashLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 224, height: 224)
+                    .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                    .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
 
                 ProgressView()
                     .tint(Color(red: 0.96, green: 0.22, blue: 0.83))
@@ -133,6 +135,8 @@ private struct MomentsLaunchOverlay: View {
             }
             .padding(.bottom, 14)
         }
+        .defersSystemGestures(on: [])
+        .persistentSystemOverlays(.visible)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Moments POS betöltése")
     }

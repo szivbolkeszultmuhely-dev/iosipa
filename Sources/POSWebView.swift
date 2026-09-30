@@ -40,6 +40,10 @@ final class POSWebModel: NSObject, ObservableObject {
         // gestures (including notification/banner interactions), so keep them off.
         view.allowsBackForwardNavigationGestures = false
         view.scrollView.keyboardDismissMode = .interactive
+        // Do not make the embedded web view more aggressive than a normal Safari page
+        // about owning touches. iOS system overlays / notification gestures stay primary.
+        view.scrollView.panGestureRecognizer.cancelsTouchesInView = false
+        view.scrollView.panGestureRecognizer.delaysTouchesBegan = false
         return view
     }()
 
