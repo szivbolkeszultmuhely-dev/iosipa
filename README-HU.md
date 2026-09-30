@@ -1,31 +1,23 @@
-# Moments POS iOS 1.7.1 – splash, tabbar és rendszer-gesztus javítás
+Moments POS iOS 1.7.2 – ellenőrzött launch screen javítás
 
-Kumulatív patch az 1.7.0 fölé.
+Ez a csomag az 1.7.1-re épül, és annak UI/gesztus/tabbar javításait megtartja.
 
-## Javítások
+Launch screen javítás:
+- A Moments POS logó NEM külön képelemként töltődik.
+- A logó fizikailag rá van sütve egy teljes képernyős lila háttérképre.
+- A natív iOS LaunchScreen.storyboard ezt az egyetlen, teljes képernyős képet használja.
+- Az app indulás utáni SwiftUI betöltőrétege is ugyanazt a LaunchComposite képet használja.
+- scaleAspectFill / scaledToFill miatt a kép közepe minden iPhone-méreten a képernyő közepén marad.
+- Nincs SplashLogo hivatkozás a projektben.
 
-- A felhasználó által újra feltöltött Moments POS ikon közvetlenül az Asset Catalogba került `SplashLogo` néven.
-- A natív LaunchScreen és az appon belüli betöltőoverlay ugyanazt az assetet használja.
-- Az AppIcon készlet is a feltöltött eredeti ikonból lett újragenerálva.
-- Moments témában az alsó tabbar világos lilás hátteret, sötétlila kiválasztott és sötét szürkés-lila nem kiválasztott ikon/feliratszínt kapott.
-- A tabbar UIKit megjelenése explicit be van állítva, hogy az újabb iOS anyaghatások se mossák el a feliratokat.
-- A WebView böngésző-vissza/előre gesztusa továbbra is kikapcsolt.
-- A teljes app explicit nem kér rendszer-szélgesztus elsőbbséget (`defersSystemGestures(on: [])`).
-- A rendszer overlayek láthatósága explicit `.visible`.
-- A WKWebView görgetőgesztusa nem törli/delayeli agresszíven a touch eseményeket.
+Verzió: 1.7.2 (build 18)
 
-## Nem változott
+Telepítés:
+1. A ZIP teljes tartalmát másold az iosipa repo gyökerébe.
+2. Engedélyezd a felülírást.
+3. GitHub Desktop Summary: Fix launch screen with baked centered logo
+4. Commit -> Push origin.
+5. GitHub Actions -> Run workflow.
+6. Az új IPA-t SideStore-ral telepítsd a meglévő app fölé.
 
-- Kassza webes belseje / WordPress CSS
-- Billingo PDF → T02 nyomtatás
-- validált T02 raster motor
-- Vonalkódcímke nyomtatás és feed
-- WordPress API
-
-## Telepítés
-
-A ZIP teljes tartalmát másold a meglévő `iosipa` repo gyökerébe, a mappastruktúrát megtartva, majd engedélyezd a felülírást.
-
-GitHub Desktop Summary:
-
-`Fix splash logo, tab bar contrast and system gestures`
+Megjegyzés: az iOS a natív launch screen pillanatképét cache-elheti. Verzió/build emelés megtörtént; ha az első indítás még korábbi képet mutat, zárd be teljesen az appot és indítsd újra. Az appon belüli betöltőréteg már biztosan a LaunchComposite képet használja.

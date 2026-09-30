@@ -104,26 +104,16 @@ struct MomentsPOST02App: App {
 private struct MomentsLaunchOverlay: View {
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.18, green: 0.08, blue: 0.41),
-                    Color(red: 0.35, green: 0.17, blue: 0.68),
-                    Color(red: 0.16, green: 0.07, blue: 0.36)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // The Moments POS mark is baked into this full-screen image.
+            // Using one centered composite avoids launch-screen image lookup issues
+            // and keeps the mark geometrically centered on every iPhone size.
+            Image("LaunchComposite")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                // Asset-catalog image generated directly from the supplied Moments POS icon.
-                // This avoids bundle-path / filename lookup differences on signed IPA builds.
-                Image("SplashLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 224, height: 224)
-                    .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
-                    .shadow(color: .black.opacity(0.24), radius: 22, x: 0, y: 12)
+            VStack(spacing: 10) {
+                Spacer()
 
                 ProgressView()
                     .tint(Color(red: 0.96, green: 0.22, blue: 0.83))
@@ -131,10 +121,11 @@ private struct MomentsLaunchOverlay: View {
 
                 Text("Kassza betöltése…")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(.white.opacity(0.86))
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, 76)
         }
+        .background(Color(red: 0.18, green: 0.08, blue: 0.41))
         .defersSystemGestures(on: [])
         .persistentSystemOverlays(.visible)
         .accessibilityElement(children: .combine)
