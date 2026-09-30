@@ -18,6 +18,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+    resources:
+      - path: Resources/Assets.xcassets
     info:
       # XcodeGen REGENERATES Info.plist from these properties. It does not
       # preserve entries manually written to Resources/Info.plist.
@@ -25,18 +27,21 @@ targets:
       properties:
         CFBundleDevelopmentRegion: hu
         CFBundleDisplayName: Moments POS
-        CFBundleShortVersionString: '1.5.1'
-        CFBundleVersion: '12'
+        CFBundleShortVersionString: '1.6.1'
+        CFBundleVersion: '14'
         LSRequiresIPhoneOS: true
         NSBluetoothAlwaysUsageDescription: 'A Moments POS közvetlen Bluetooth-kapcsolattal csatlakozik az AIMO T02 nyomtatóhoz, hogy nyugtát tudjon nyomtatni.'
         NSCameraUsageDescription: 'A Moments POS a termékek vonalkódjának beolvasásához kéri a kamerához való hozzáférést.'
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchLogo
+          UIImageRespectsSafeAreaInsets: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: hu.szivbolkeszult.momentspost02
         PRODUCT_NAME: MomentsPOST02
         INFOPLIST_FILE: Resources/Info.plist
-        ASSETCATALOG_COMPILER_APPICON_NAME: ''
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

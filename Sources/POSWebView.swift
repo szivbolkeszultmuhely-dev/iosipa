@@ -12,6 +12,7 @@ final class POSWebModel: NSObject, ObservableObject {
     private static let allowedHosts: Set<String> = ["szivbolkeszult.hu", "www.szivbolkeszult.hu"]
 
     @Published private(set) var isLoading = false
+    @Published private(set) var initialPageReady = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var pdfIsLoading = false
     @Published private(set) var pdfError: String?
@@ -34,7 +35,10 @@ final class POSWebModel: NSObject, ObservableObject {
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self
         view.uiDelegate = self
-        view.allowsBackForwardNavigationGestures = true
+        // This app is a dedicated POS shell, not a general web browser.
+        // WKWebView's browser-style edge swipes can compete with iOS system
+        // gestures (including notification/banner interactions), so keep them off.
+        view.allowsBackForwardNavigationGestures = false
         view.scrollView.keyboardDismissMode = .interactive
         return view
     }()
@@ -125,6 +129,7 @@ extension POSWebModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isLoading = false
         errorMessage = nil
+        initialPageReady = true
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -139,6 +144,7 @@ extension POSWebModel: WKNavigationDelegate {
         // -999: a previous request was cancelled by a newer navigation.
         if (error as NSError).code == NSURLErrorCancelled { return }
         isLoading = false
+        initialPageReady = true
         errorMessage = "Nem sikerült betölteni a kasszát: \(error.localizedDescription)"
     }
 
@@ -167,6 +173,7 @@ extension POSWebModel: WKNavigationDelegate {
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         isLoading = false
+        initialPageReady = true
         errorMessage = "A kassza nézete váratlanul leállt. Koppints az Újratöltés gombra."
     }
 }
