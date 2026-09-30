@@ -27,9 +27,28 @@ final class POSWebModel: NSObject, ObservableObject {
         config.websiteDataStore = WKWebsiteDataStore.default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.add(self, name: "momentsPDF")
+        config.userContentController.add(self, name: "momentsReady")
+        config.suppressesIncrementalRendering = false
         config.userContentController.addUserScript(
             WKUserScript(source: ReceiptBridge.userScript,
                          injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
+        // Signal as soon as the DOM is usable instead of waiting for every remote
+        // image/font/resource to finish. This lets the branded loader disappear sooner.
+        let readyScript = """
+        (() => {
+          const signalReady = () => {
+            try { window.webkit.messageHandlers.momentsReady.postMessage('dom-ready'); } catch (_) {}
+          };
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', signalReady, { once: true });
+          } else {
+            signalReady();
+          }
+        })();
+        """
+        config.userContentController.addUserScript(
+            WKUserScript(source: readyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
 
         let view = WKWebView(frame: .zero, configuration: config)
@@ -50,7 +69,11 @@ final class POSWebModel: NSObject, ObservableObject {
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
-        webView.load(URLRequest(url: Self.posURL, cachePolicy: .useProtocolCachePolicy))
+        webView.load(URLRequest(
+            url: Self.posURL,
+            cachePolicy: .useProtocolCachePolicy,
+            timeoutInterval: 15
+        ))
     }
 
     func reload() {
@@ -88,8 +111,16 @@ final class POSWebModel: NSObject, ObservableObject {
 extension POSWebModel: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
+        guard message.webView === webView else { return }
+
+        if message.name == "momentsReady" {
+            if let url = webView.url, isOurWebsite(url) {
+                initialPageReady = true
+            }
+            return
+        }
+
         guard message.name == "momentsPDF",
-              message.webView === webView,
               let url = webView.url, isOurWebsite(url),
               let payload = message.body as? [String: Any],
               let kind = payload["kind"] as? String else { return }
@@ -250,13 +281,18 @@ struct POSWebScreen: View {
                 reloadAction: { model.reload() }
             )
 
-            if model.isLoading {
-                ProgressView()
-                    .tint(theme.accent2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 5)
-                    .background(theme.surface)
+            // Keep a fixed-height loading lane so navigation never pushes the cashier
+            // content up/down. The thin indicator appears without layout jumping.
+            ZStack {
+                theme.surface
+                if model.isLoading {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(theme.accent2)
+                        .padding(.horizontal, 8)
+                }
             }
+            .frame(height: 4)
 
             if model.pdfIsLoading {
                 HStack(spacing: 8) {

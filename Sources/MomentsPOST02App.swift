@@ -13,6 +13,17 @@ struct MomentsPOST02App: App {
     @State private var showLaunchOverlay = true
     @State private var launchStartedAt = Date()
 
+    init() {
+        // Product thumbnails and other native URL loads can reuse a reasonably sized
+        // on-device cache between screens and app launches. WKWebView keeps its own
+        // persistent website cache separately.
+        URLCache.shared = URLCache(
+            memoryCapacity: 32 * 1024 * 1024,
+            diskCapacity: 128 * 1024 * 1024,
+            diskPath: "MomentsPOSURLCache"
+        )
+    }
+
     var body: some Scene {
         WindowGroup {
             MomentsThemeReader { theme in
@@ -59,9 +70,13 @@ struct MomentsPOST02App: App {
                 .environmentObject(appUI)
                 .onAppear {
                     launchStartedAt = Date()
+                    // Start the cashier immediately. Bluetooth discovery is deliberately
+                    // deferred so WebKit gets the first CPU/network burst at launch.
                     posWeb.loadIfNeeded()
                     if preferences.autoScanPrinter {
-                        printer.startIfPossible()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+                            printer.startIfPossible()
+                        }
                     }
                     if !preferences.showBrandedLoader {
                         showLaunchOverlay = false
@@ -74,20 +89,18 @@ struct MomentsPOST02App: App {
                     if !enabled { showLaunchOverlay = false }
                 }
                 .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
+                    // No artificial minimum splash duration: as soon as the cashier DOM
+                    // is usable, reveal it. The native launch screen already covers startup.
                     guard ready, showLaunchOverlay, preferences.showBrandedLoader else { return }
-                    let elapsed = Date().timeIntervalSince(launchStartedAt)
-                    let remaining = max(0, 1.20 - elapsed)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
-                        guard showLaunchOverlay else { return }
-                        withAnimation(.easeOut(duration: 0.30)) {
-                            showLaunchOverlay = false
-                        }
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        showLaunchOverlay = false
                     }
                 }
                 .task {
-                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    // Safety net only. A slow remote resource must not hold the whole UI.
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
                     guard showLaunchOverlay else { return }
-                    withAnimation(.easeOut(duration: 0.30)) {
+                    withAnimation(.easeOut(duration: 0.16)) {
                         showLaunchOverlay = false
                     }
                 }

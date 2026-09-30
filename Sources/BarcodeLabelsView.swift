@@ -1,7 +1,9 @@
 import SwiftUI
 import WebKit
+import Foundation
+import Combine
 
-struct BarcodeLabelProduct: Identifiable, Decodable, Hashable {
+struct BarcodeLabelProduct: Identifiable, Codable, Hashable {
     let id: Int
     let name: String
     let sku: String
@@ -17,7 +19,7 @@ struct BarcodeLabelProduct: Identifiable, Decodable, Hashable {
     }
 }
 
-struct BarcodeLabelPage: Decodable {
+struct BarcodeLabelPage: Codable {
     let items: [BarcodeLabelProduct]
     let page: Int
     let perPage: Int
@@ -27,6 +29,37 @@ struct BarcodeLabelPage: Decodable {
     enum CodingKeys: String, CodingKey {
         case items, page, pages, total
         case perPage = "per_page"
+    }
+}
+
+private struct BarcodeLabelCacheEnvelope: Codable {
+    let savedAt: Date
+    let page: BarcodeLabelPage
+}
+
+private enum BarcodeLabelCache {
+    private static let maxAge: TimeInterval = 6 * 60 * 60
+
+    private static var url: URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("moments-barcode-products-v1.json")
+    }
+
+    static func load() -> BarcodeLabelPage? {
+        guard let url,
+              let data = try? Data(contentsOf: url),
+              let envelope = try? JSONDecoder().decode(BarcodeLabelCacheEnvelope.self, from: data),
+              Date().timeIntervalSince(envelope.savedAt) <= maxAge else { return nil }
+        return envelope.page
+    }
+
+    static func save(_ page: BarcodeLabelPage) {
+        guard let url else { return }
+        let envelope = BarcodeLabelCacheEnvelope(savedAt: Date(), page: page)
+        DispatchQueue.global(qos: .utility).async {
+            guard let data = try? JSONEncoder().encode(envelope) else { return }
+            try? data.write(to: url, options: [.atomic])
+        }
     }
 }
 
@@ -71,7 +104,7 @@ extension POSWebModel {
             method: 'GET',
             headers: {'Accept': 'application/json', 'X-WP-Nonce': config.nonce},
             credentials: 'same-origin',
-            cache: 'no-store'
+            cache: 'default'
         });
         let payload = {};
         try { payload = await response.json(); }
@@ -147,6 +180,8 @@ struct BarcodeLabelsView: View {
     @State private var errorMessage: String?
     @State private var printMessage: String?
     @State private var firstLoadRequested = false
+    @State private var initialRefreshStarted = false
+    @State private var restoredCache = false
 
     var body: some View {
         let theme = MomentsPalette.make(mode: preferences.appearance, colorScheme: colorScheme)
@@ -229,7 +264,7 @@ struct BarcodeLabelsView: View {
                 .padding(14)
             }
             .background(theme.background)
-            .refreshable { loadProducts(reset: true) }
+            .refreshable { loadProducts(reset: true, preserveExisting: true) }
         }
         .background(theme.background.ignoresSafeArea())
         .alert("Vonalkódnyomtatás", isPresented: Binding(
@@ -243,12 +278,20 @@ struct BarcodeLabelsView: View {
         .onAppear {
             posWeb.loadIfNeeded()
             if preferences.autoScanPrinter { printer.startIfPossible() }
+
             if !firstLoadRequested {
                 firstLoadRequested = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    loadProducts(reset: true)
+                restoreCachedProductsIfAvailable()
+                if posWeb.initialPageReady {
+                    initialRefreshStarted = true
+                    loadProducts(reset: true, preserveExisting: !products.isEmpty)
                 }
             }
+        }
+        .onReceive(posWeb.$initialPageReady.removeDuplicates()) { ready in
+            guard ready, firstLoadRequested, !initialRefreshStarted else { return }
+            initialRefreshStarted = true
+            loadProducts(reset: true, preserveExisting: !products.isEmpty)
         }
     }
 
@@ -461,7 +504,22 @@ struct BarcodeLabelsView: View {
         }
     }
 
-    private func loadProducts(reset: Bool) {
+    private func restoreCachedProductsIfAvailable() {
+        guard !restoredCache else { return }
+        restoredCache = true
+        guard let cached = BarcodeLabelCache.load(), !cached.items.isEmpty else { return }
+
+        products = cached.items
+        loadedSearch = ""
+        page = cached.page
+        pages = cached.pages
+        total = cached.total
+        for item in cached.items where quantities[item.id] == nil {
+            quantities[item.id] = 1
+        }
+    }
+
+    private func loadProducts(reset: Bool, preserveExisting: Bool = false) {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -469,12 +527,14 @@ struct BarcodeLabelsView: View {
         let requestedPage = reset ? 1 : page + 1
         let requestedSearch = reset ? searchText.trimmingCharacters(in: .whitespacesAndNewlines) : loadedSearch
 
-        posWeb.fetchBarcodeLabelProducts(search: requestedSearch, page: requestedPage, perPage: 50) { result in
+        posWeb.fetchBarcodeLabelProducts(search: requestedSearch, page: requestedPage, perPage: 100) { result in
             isLoading = false
             switch result {
             case .failure(let error):
-                if reset { products = [] }
-                errorMessage = error.localizedDescription
+                if reset && !preserveExisting { products = [] }
+                if products.isEmpty {
+                    errorMessage = error.localizedDescription
+                }
             case .success(let response):
                 if reset {
                     products = response.items
@@ -488,6 +548,12 @@ struct BarcodeLabelsView: View {
                 total = response.total
                 for item in response.items where quantities[item.id] == nil {
                     quantities[item.id] = 1
+                }
+
+                // Cache only the unfiltered first page. On the next app launch this
+                // renders instantly, while a silent background refresh revalidates it.
+                if requestedSearch.isEmpty && requestedPage == 1 {
+                    BarcodeLabelCache.save(response)
                 }
             }
         }
